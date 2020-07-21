@@ -26,6 +26,10 @@ doc = false
 name = "sst2_benchmark"
 harness = false
 
+[[bench]]
+name = "squad_benchmark"
+harness = false
+
 [profile.bench]
 opt-level = 3
 

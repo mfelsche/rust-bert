@@ -1,11 +1,11 @@
 #[macro_use]
 extern crate criterion;
 
-use criterion::Criterion;
+use criterion::{black_box, Criterion};
 use rust_bert::bert::{BertConfigResources, BertModelResources, BertVocabResources};
 use rust_bert::pipelines::common::ModelType;
 use rust_bert::pipelines::question_answering::{
-    squad_processor, QaInput, QuestionAnsweringConfig, QuestionAnsweringModel,
+    squad_processor, QaExample, QaFeature, QaInput, QuestionAnsweringConfig, QuestionAnsweringModel,
 };
 use rust_bert::resources::{RemoteResource, Resource};
 use std::env;
@@ -47,6 +47,38 @@ fn squad_forward_pass(
     duration
 }
 
+fn squad_feature_preparation_pass(
+    iters: u64,
+    model: &QuestionAnsweringModel,
+    squad_data: &Vec<QaInput>,
+) -> Duration {
+    let mut duration = Duration::new(0, 0);
+    for _i in 0..iters {
+        let start = Instant::now();
+        let examples: Vec<QaExample> = squad_data
+            .iter()
+            .map(|qa_input| QaExample::new(&qa_input.question, &qa_input.context))
+            .collect();
+        let _features: Vec<QaFeature> = examples
+            .iter()
+            .enumerate()
+            .map(|(example_index, qa_example)| {
+                model.generate_features(
+                    &qa_example,
+                    model.max_seq_len,
+                    model.doc_stride,
+                    model.max_query_length,
+                    example_index as i64,
+                )
+            })
+            .flatten()
+            .collect();
+
+        duration = duration.checked_add(start.elapsed()).unwrap();
+    }
+    duration
+}
+
 fn qa_load_model(iters: u64) -> Duration {
     let mut duration = Duration::new(0, 0);
     for _i in 0..iters {
@@ -81,11 +113,15 @@ fn bench_squad(c: &mut Criterion) {
     qa_inputs.truncate(1000);
 
     c.bench_function("SQuAD forward pass", |b| {
-        b.iter_custom(|iters| squad_forward_pass(iters, &model, &qa_inputs))
+        b.iter_custom(|iters| black_box(squad_forward_pass(iters, &model, &qa_inputs)))
+    });
+
+    c.bench_function("SQuAD features generation", |b| {
+        b.iter_custom(|iters| black_box(squad_feature_preparation_pass(iters, &model, &qa_inputs)))
     });
 
     c.bench_function("Load model", |b| {
-        b.iter_custom(|iters| qa_load_model(iters))
+        b.iter_custom(|iters| black_box(qa_load_model(iters)))
     });
 }
 

@@ -74,7 +74,7 @@ pub struct QaInput {
 }
 
 #[derive(Debug)]
-struct QaExample {
+pub struct QaExample {
     pub question: String,
     pub context: String,
     pub doc_tokens: Vec<String>,
@@ -82,7 +82,7 @@ struct QaExample {
 }
 
 #[derive(Debug)]
-struct QaFeature {
+pub struct QaFeature {
     pub input_ids: Vec<i64>,
     pub attention_mask: Vec<i64>,
     pub token_to_orig_map: HashMap<i64, i64>,
@@ -357,9 +357,9 @@ pub struct QuestionAnsweringModel {
     tokenizer: TokenizerOption,
     pad_idx: i64,
     sep_idx: i64,
-    max_seq_len: usize,
-    doc_stride: usize,
-    max_query_length: usize,
+    pub max_seq_len: usize,
+    pub doc_stride: usize,
+    pub max_query_length: usize,
     max_answer_len: usize,
     distilbert_qa: QuestionAnsweringOption,
     var_store: VarStore,
@@ -627,7 +627,7 @@ impl QuestionAnsweringModel {
         (start, end, scores)
     }
 
-    fn generate_features(
+    pub fn generate_features(
         &self,
         qa_example: &QaExample,
         max_seq_length: usize,

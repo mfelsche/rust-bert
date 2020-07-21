@@ -22,6 +22,13 @@ name = "convert-tensor"
 path = "src/convert-tensor.rs"
 doc = false
 
+[[bench]]
+name = "sst2_benchmark"
+harness = false
+
+[profile.bench]
+opt-level = 3
+
 [features]
 doc-only = ["tch/doc-only"]
 all-tests = []
@@ -30,8 +37,9 @@ all-tests = []
 features = [ "doc-only" ]
 
 [dependencies]
-rust_tokenizers = "~3.1.5"
+rust_tokenizers = {version = "~3.1.6", path = "E:/coding/backup-rust/rust-tokenizers/main"}
 tch = "~0.1.7"
+torch-sys = "0.1.7"
 serde_json = "1.0.51"
 serde = {version = "1.0.106", features = ["derive"]}
 failure = "0.1.7"
@@ -43,3 +51,6 @@ reqwest = "0.10.4"
 lazy_static = "1.4.0"
 uuid = {version="0.8.1", features =["v4"]}
 tokio = { version = "0.2.21", features = ["full"] }
+
+[dev-dependencies]
+criterion = "0.3.3"

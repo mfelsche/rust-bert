@@ -30,6 +30,10 @@ harness = false
 name = "squad_benchmark"
 harness = false
 
+[[bench]]
+name = "summarization_benchmark"
+harness = false
+
 [profile.bench]
 opt-level = 3
 

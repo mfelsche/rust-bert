@@ -34,6 +34,10 @@ harness = false
 name = "summarization_benchmark"
 harness = false
 
+[[bench]]
+name = "translation_benchmark"
+harness = false
+
 [profile.bench]
 opt-level = 3
 

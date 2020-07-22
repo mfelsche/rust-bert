@@ -87,7 +87,7 @@ use rust_tokenizers::{
     Gpt2Tokenizer, Gpt2Vocab, OpenAiGptTokenizer, OpenAiGptVocab, RobertaTokenizer, RobertaVocab,
     Tokenizer, TruncationStrategy, Vocab,
 };
-use tch::kind::Kind::Int64;
+use tch::kind::Kind::{Bool, Int64};
 use tch::{nn, no_grad, Device, Tensor};
 
 extern crate ordered_float;
@@ -478,22 +478,41 @@ impl PrivateLanguageGenerator<GPT2LMHeadModel, Gpt2Vocab, Gpt2Tokenizer> for GPT
         input_ids: Tensor,
         _encoder_outputs: Option<&'a Tensor>,
         past: Cache,
-        _attention_mask: Tensor,
-    ) -> (Option<Tensor>, Option<&'a Tensor>, Option<Tensor>, Cache) {
+        attention_mask: Tensor,
+    ) -> (
+        Option<Tensor>,
+        Option<Tensor>,
+        Option<&'a Tensor>,
+        Option<Tensor>,
+        Cache,
+    ) {
         match past {
             Cache::GPT2Cache(past) => {
                 if past.is_some() {
                     (
                         Some(input_ids.select(1, -1).unsqueeze(-1)),
+                        Some(attention_mask),
                         None,
                         None,
                         Cache::GPT2Cache(past),
                     )
                 } else {
-                    (Some(input_ids), None, None, Cache::GPT2Cache(None))
+                    (
+                        Some(input_ids),
+                        Some(attention_mask),
+                        None,
+                        None,
+                        Cache::GPT2Cache(None),
+                    )
                 }
             }
-            Cache::None => (Some(input_ids), None, None, Cache::GPT2Cache(None)),
+            Cache::None => (
+                Some(input_ids),
+                Some(attention_mask),
+                None,
+                None,
+                Cache::GPT2Cache(None),
+            ),
             _ => panic!("Cache type incompatible with GPT2"),
         }
     }
@@ -696,17 +715,25 @@ impl PrivateLanguageGenerator<BartForConditionalGeneration, RobertaVocab, Robert
         input_ids: Tensor,
         encoder_outputs: Option<&'a Tensor>,
         past: Cache,
-        _attention_mask: Tensor,
-    ) -> (Option<Tensor>, Option<&'a Tensor>, Option<Tensor>, Cache) {
+        attention_mask: Tensor,
+    ) -> (
+        Option<Tensor>,
+        Option<Tensor>,
+        Option<&'a Tensor>,
+        Option<Tensor>,
+        Cache,
+    ) {
         match past {
             Cache::BARTCache(past) => (
                 None,
+                Some(attention_mask),
                 encoder_outputs,
                 Some(input_ids),
                 Cache::BARTCache(past),
             ),
             Cache::None => (
                 None,
+                Some(attention_mask),
                 encoder_outputs,
                 Some(input_ids),
                 Cache::BARTCache(None),
@@ -965,17 +992,25 @@ impl PrivateLanguageGenerator<MarianForConditionalGeneration, MarianVocab, Maria
         input_ids: Tensor,
         encoder_outputs: Option<&'a Tensor>,
         past: Cache,
-        _attention_mask: Tensor,
-    ) -> (Option<Tensor>, Option<&'a Tensor>, Option<Tensor>, Cache) {
+        attention_mask: Tensor,
+    ) -> (
+        Option<Tensor>,
+        Option<Tensor>,
+        Option<&'a Tensor>,
+        Option<Tensor>,
+        Cache,
+    ) {
         match past {
             Cache::BARTCache(past) => (
                 None,
+                Some(attention_mask),
                 encoder_outputs,
                 Some(input_ids),
                 Cache::BARTCache(past),
             ),
             Cache::None => (
                 None,
+                Some(attention_mask),
                 encoder_outputs,
                 Some(input_ids),
                 Cache::BARTCache(None),
@@ -1191,11 +1226,29 @@ impl PrivateLanguageGenerator<T5ForConditionalGeneration, T5Vocab, T5Tokenizer> 
         input_ids: Tensor,
         encoder_outputs: Option<&'a Tensor>,
         past: Cache,
-        _attention_mask: Tensor,
-    ) -> (Option<Tensor>, Option<&'a Tensor>, Option<Tensor>, Cache) {
+        attention_mask: Tensor,
+    ) -> (
+        Option<Tensor>,
+        Option<Tensor>,
+        Option<&'a Tensor>,
+        Option<Tensor>,
+        Cache,
+    ) {
         match past {
-            Cache::T5Cache(past) => (None, encoder_outputs, Some(input_ids), Cache::T5Cache(past)),
-            Cache::None => (None, encoder_outputs, Some(input_ids), Cache::T5Cache(None)),
+            Cache::T5Cache(past) => (
+                None,
+                Some(attention_mask),
+                encoder_outputs,
+                Some(input_ids),
+                Cache::T5Cache(past),
+            ),
+            Cache::None => (
+                None,
+                Some(attention_mask),
+                encoder_outputs,
+                Some(input_ids),
+                Cache::T5Cache(None),
+            ),
             _ => panic!("Cache type incompatible with T5"),
         }
     }
@@ -1331,9 +1384,15 @@ pub(crate) mod private_generation_utils {
             input_ids: Tensor,
             _encoder_outputs: Option<&'a Tensor>,
             past: Cache,
-            _attention_mask: Tensor,
-        ) -> (Option<Tensor>, Option<&'a Tensor>, Option<Tensor>, Cache) {
-            (Some(input_ids), None, None, past)
+            attention_mask: Tensor,
+        ) -> (
+            Option<Tensor>,
+            Option<Tensor>,
+            Option<&'a Tensor>,
+            Option<Tensor>,
+            Cache,
+        ) {
+            (Some(input_ids), Some(attention_mask), None, None, past)
         }
 
         fn encode_prompt_text(
@@ -1565,10 +1624,10 @@ pub(crate) mod private_generation_utils {
             let mut past: Cache = Cache::None;
             let mut outputs: Tensor;
             let mut current_length = cur_len;
-
             while current_length < max_length {
                 let (
                     prepared_input,
+                    prepared_attention_mask,
                     prepared_encoder_output,
                     prepared_decoder_input,
                     prepared_past,
@@ -1578,13 +1637,12 @@ pub(crate) mod private_generation_utils {
                     past,
                     attention_mask.copy(),
                 );
-
                 let temp = self
                     .get_model()
                     .forward_t(
                         &prepared_input,
                         prepared_past,
-                        &None,
+                        &prepared_attention_mask,
                         &None,
                         &None,
                         &None,
@@ -1595,7 +1653,6 @@ pub(crate) mod private_generation_utils {
                     .unwrap();
                 outputs = temp.0;
                 past = temp.2;
-
                 let mut next_token_logits = outputs.select(1, -1);
                 //            Reduce probability for repeated inputs
                 if repetition_penalty > 1f64 {
@@ -1775,6 +1832,7 @@ pub(crate) mod private_generation_utils {
             while current_length < max_length {
                 let (
                     prepared_input,
+                    prepared_attention_mask,
                     prepared_encoder_output,
                     prepared_decoder_input,
                     prepared_past,
@@ -1789,7 +1847,7 @@ pub(crate) mod private_generation_utils {
                     .forward_t(
                         &prepared_input,
                         prepared_past,
-                        &None,
+                        &prepared_attention_mask,
                         &None,
                         &None,
                         &None,
@@ -1979,8 +2037,7 @@ pub(crate) mod private_generation_utils {
                 input_ids = input_ids.index_select(0, &beam_indices);
                 input_ids = Tensor::cat(&[input_ids, beam_tokens.unsqueeze(1)], -1);
                 encoder_outputs = self.reorder_cache(&mut past, encoder_outputs, &beam_indices);
-                // past = temp_past.0;
-                // encoder_outputs = temp_past.1;
+
                 if !self.is_encoder_decoder() {
                     attention_mask = Tensor::cat(
                         &[
@@ -2257,8 +2314,8 @@ pub trait LanguageGenerator<T: LMHeadModel, V: Vocab, U: Tokenizer<V>>:
         let attention_mask = match attention_mask {
             Some(value) => value,
             None => match self.get_pad_id() {
-                Some(pad_id) => input_ids.ne(*pad_id).to_kind(Int64),
-                None => input_ids.ones_like(),
+                Some(pad_id) => input_ids.ne(*pad_id).to_kind(Bool),
+                None => input_ids.ones_like().to_kind(Bool),
             },
         };
 

@@ -395,7 +395,6 @@ impl BartModel {
                     )
                 }
             };
-
         let (decoder_outputs, decoder_cache, all_decoder_hidden_states, all_decoder_attentions) =
             self.decoder.forward_t(
                 &decoder_input_ids,

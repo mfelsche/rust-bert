@@ -505,7 +505,7 @@ impl TranslationConfig {
             max_length: 512,
             do_sample: false,
             early_stopping: true,
-            num_beams: 1,
+            num_beams: 6,
             temperature: 1.0,
             top_k: 50,
             top_p: 1.0,
@@ -581,7 +581,7 @@ impl TranslationConfig {
             min_length: 0,
             max_length: 512,
             do_sample: false,
-            early_stopping: false,
+            early_stopping: true,
             num_beams: 6,
             temperature: 1.0,
             top_k: 50,
@@ -672,7 +672,7 @@ impl TranslationOption {
 
 /// # TranslationModel to perform translation
 pub struct TranslationModel {
-    model: TranslationOption,
+    pub model: TranslationOption,
     prefix: Option<String>,
 }
 

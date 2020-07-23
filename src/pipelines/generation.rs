@@ -1344,7 +1344,7 @@ pub enum Cache {
     None,
 }
 
-pub(crate) mod private_generation_utils {
+pub mod private_generation_utils {
     use super::ordered_float::OrderedFloat;
     use crate::pipelines::generation::{BeamHypotheses, Cache, GenerateConfig, LMHeadModel};
     use itertools::Itertools;

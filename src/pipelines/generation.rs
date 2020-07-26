@@ -87,6 +87,7 @@ use rust_tokenizers::{
     Gpt2Tokenizer, Gpt2Vocab, OpenAiGptTokenizer, OpenAiGptVocab, RobertaTokenizer, RobertaVocab,
     Tokenizer, TruncationStrategy, Vocab,
 };
+use std::time::Instant;
 use tch::kind::Kind::Int64;
 use tch::{nn, no_grad, Device, Tensor};
 
@@ -1352,6 +1353,7 @@ pub mod private_generation_utils {
     use rust_tokenizers::{Tokenizer, TruncationStrategy, Vocab};
     use std::cmp::{max, min};
     use std::collections::HashMap;
+    use std::time::Instant;
     use tch::kind::Kind::{Bool, Float, Int64};
     use tch::{nn, Device, Tensor};
 
@@ -1804,6 +1806,7 @@ pub mod private_generation_utils {
             num_beams: i64,
             attention_mask: Tensor,
         ) -> Tensor {
+            let t0 = Instant::now();
             let mut hypotheses = (0..batch_size)
                 .map(|_| BeamHypotheses::new(num_beams, max_length, length_penalty, early_stopping))
                 .collect::<Vec<BeamHypotheses>>();
@@ -1830,8 +1833,15 @@ pub mod private_generation_utils {
             let mut outputs: Tensor;
             let mut encoder_outputs = encoder_outputs;
             let mut current_length = cur_len;
-
+            println!("Beam search preparation: {:?}", t0.elapsed().as_millis());
+            let mut input_preparation = vec![];
+            let mut forward_pass = vec![];
+            let mut adjust_logits = vec![];
+            let mut postprocessing = vec![];
+            let mut sampling = vec![];
+            let mut beam_update = vec![];
             while current_length < max_length {
+                let t0 = Instant::now();
                 let (
                     prepared_input,
                     prepared_attention_mask,
@@ -1844,6 +1854,8 @@ pub mod private_generation_utils {
                     past,
                     attention_mask.copy(),
                 );
+                input_preparation.push(t0.elapsed().as_millis());
+                let t0 = Instant::now();
                 let temp = self
                     .get_model()
                     .forward_t(
@@ -1860,9 +1872,19 @@ pub mod private_generation_utils {
                     .unwrap();
                 outputs = temp.0;
                 past = temp.2;
-
+                forward_pass.push(t0.elapsed().as_millis());
+                let t0 = Instant::now();
                 let mut next_token_logits = outputs.select(1, -1);
-
+                if self.is_encoder_decoder() & !do_sample {
+                    self.prepare_scores_for_generation(
+                        &mut next_token_logits,
+                        current_length,
+                        max_length,
+                    );
+                }
+                adjust_logits.push(t0.elapsed().as_millis());
+                let t0 = Instant::now();
+                let mut scores = next_token_logits.log_softmax(-1, Float);
                 //            Reduce probability for repeated inputs
                 if repetition_penalty > 1f64 {
                     self.enforce_repetition_penalty(
@@ -1873,14 +1895,10 @@ pub mod private_generation_utils {
                         repetition_penalty,
                     )
                 }
-
                 if temperature > 1f64 {
                     next_token_logits = next_token_logits / temperature;
                 }
-                let mut scores = next_token_logits.log_softmax(-1, Float);
-                if self.is_encoder_decoder() & !do_sample {
-                    self.prepare_scores_for_generation(&mut scores, current_length, max_length);
-                }
+
                 //            Do not allow eos token if min length is not reached
                 if (&eos_token_ids.is_some()) & (current_length < min_length) {
                     &scores.index_fill_(
@@ -1907,7 +1925,8 @@ pub mod private_generation_utils {
                         );
                     }
                 }
-
+                postprocessing.push(t0.elapsed().as_millis());
+                let t0 = Instant::now();
                 let (next_scores, next_tokens) = if do_sample {
                     let mut _scores: Tensor =
                         &scores + &beam_scores.unsqueeze(-1).expand_as(&scores);
@@ -1930,7 +1949,8 @@ pub mod private_generation_utils {
                         .view((batch_size, num_beams * vocab_size));
                     next_scores.topk(2 * num_beams, 1, true, true)
                 };
-
+                sampling.push(t0.elapsed().as_millis());
+                let t0 = Instant::now();
                 let mut next_batch_beam: Vec<(f64, i64, i64)> = vec![];
                 for batch_index in 0..batch_size {
                     if done[batch_index as usize] {
@@ -2053,11 +2073,12 @@ pub mod private_generation_utils {
                         -1,
                     );
                 }
+                beam_update.push(t0.elapsed().as_millis());
                 current_length += 1;
             }
 
             let mut batch_index = 0i64;
-
+            let t0 = Instant::now();
             loop {
                 if batch_index == batch_size {
                     break;
@@ -2135,7 +2156,16 @@ pub mod private_generation_utils {
                     .to_kind(Int64)
                     .to(input_ids.device())
             };
-
+            println!(
+                "input preparation: {:?}",
+                input_preparation.iter().sum::<u128>()
+            );
+            println!("forward pass: {:?}", forward_pass.iter().sum::<u128>());
+            println!("adjust logits: {:?}", adjust_logits.iter().sum::<u128>());
+            println!("postprocessing: {:?}", postprocessing.iter().sum::<u128>());
+            println!("sampling: {:?}", sampling.iter().sum::<u128>());
+            println!("beam update: {:?}", beam_update.iter().sum::<u128>());
+            println!("decoding: {:?}", t0.elapsed().as_millis());
             decoded
         }
 
@@ -2233,6 +2263,7 @@ pub trait LanguageGenerator<T: LMHeadModel, V: Vocab, U: Tokenizer<V>>:
         prompt_texts: Option<Vec<&str>>,
         attention_mask: Option<Tensor>,
     ) -> Vec<String> {
+        let t0 = Instant::now();
         let eos_token_ids = PrivateLanguageGenerator::get_eos_ids(self).clone();
 
         let config = PrivateLanguageGenerator::get_config(self);
@@ -2261,6 +2292,7 @@ pub trait LanguageGenerator<T: LMHeadModel, V: Vocab, U: Tokenizer<V>>:
                 ),
             },
         };
+        println!("Preparation 1: {:?}", t0.elapsed().as_millis());
         let generated = self.generate_from_ids_and_past(input_ids, attention_mask);
         let mut output = Vec::with_capacity(generated.len());
         for generated_sequence in generated {
@@ -2274,6 +2306,7 @@ pub trait LanguageGenerator<T: LMHeadModel, V: Vocab, U: Tokenizer<V>>:
         input_ids: Tensor,
         attention_mask: Option<Tensor>,
     ) -> Vec<Vec<i64>> {
+        let t0 = Instant::now();
         let eos_token_ids = PrivateLanguageGenerator::get_eos_ids(self).clone();
 
         let config = PrivateLanguageGenerator::get_config(self);
@@ -2384,6 +2417,7 @@ pub trait LanguageGenerator<T: LMHeadModel, V: Vocab, U: Tokenizer<V>>:
             (input_ids, attention_mask)
         };
 
+        println!("Preparation 2: {:?}", t0.elapsed().as_millis());
         let decoded = no_grad(|| {
             if num_beams > 1 {
                 self.generate_beam_search(

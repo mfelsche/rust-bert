@@ -22,7 +22,7 @@ fn main() -> failure::Fallible<()> {
     unsafe {
         torch_sys::dummy_cuda_dependency();
     }
-    let config = TranslationConfig::new(Language::EnglishToFrench, Device::cuda_if_available());
+    let config = TranslationConfig::new(Language::EnglishToFrenchV2, Device::cuda_if_available());
     let model = TranslationModel::new(config)?;
 
     let data = [

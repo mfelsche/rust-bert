@@ -18,7 +18,7 @@ use crate::common::dropout::Dropout;
 use crate::pipelines::generation::{Cache, LMHeadModel};
 use crate::Config;
 use serde::{Deserialize, Serialize};
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use tch::kind::Kind::{Float, Int64};
 use tch::nn::{embedding, EmbeddingConfig};
@@ -39,53 +39,68 @@ pub struct BartMergesResources;
 impl BartModelResources {
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART: (&'static str, &'static str) = (
-        "bart/model.ot",
+        "bart/model",
         "https://cdn.huggingface.co/facebook/bart-large/rust_model.ot",
     );
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART_CNN: (&'static str, &'static str) = (
-        "bart-cnn/model.ot",
+        "bart-cnn/model",
         "https://cdn.huggingface.co/facebook/bart-large-cnn/rust_model.ot",
     );
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART_XSUM: (&'static str, &'static str) = (
-        "bart-xsum/model.ot",
+        "bart-xsum/model",
         "https://cdn.huggingface.co/facebook/bart-large-xsum/rust_model.ot",
+    );
+    /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
+    pub const BART_MNLI: (&'static str, &'static str) = (
+        "bart-large-mnli/model",
+        "https://cdn.huggingface.co/facebook/bart-large-mnli/rust_model.ot",
     );
 }
 
 impl BartConfigResources {
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART: (&'static str, &'static str) = (
-        "bart/config.json",
+        "bart/config",
         "https://cdn.huggingface.co/facebook/bart-large/config.json",
     );
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART_CNN: (&'static str, &'static str) = (
-        "bart-cnn/config.json",
+        "bart-cnn/config",
         "https://cdn.huggingface.co/facebook/bart-large-cnn/config.json",
     );
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART_XSUM: (&'static str, &'static str) = (
-        "bart-xsum/config.json",
+        "bart-xsum/config",
         "https://cdn.huggingface.co/facebook/bart-large-xsum/config.json",
+    );
+    /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
+    pub const BART_MNLI: (&'static str, &'static str) = (
+        "bart-large-mnli/config",
+        "https://cdn.huggingface.co/facebook/bart-large-mnli/config.json",
     );
 }
 
 impl BartVocabResources {
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART: (&'static str, &'static str) = (
-        "bart/vocab.txt",
+        "bart/vocab",
         "https://cdn.huggingface.co/roberta-large-vocab.json",
     );
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART_CNN: (&'static str, &'static str) = (
-        "bart-cnn/vocab.txt",
+        "bart-cnn/vocab",
         "https://cdn.huggingface.co/roberta-large-vocab.json",
     );
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART_XSUM: (&'static str, &'static str) = (
-        "bart-xsum/vocab.txt",
+        "bart-xsum/vocab",
+        "https://cdn.huggingface.co/roberta-large-vocab.json",
+    );
+    /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
+    pub const BART_MNLI: (&'static str, &'static str) = (
+        "bart-large-mnli/vocab",
         "https://cdn.huggingface.co/roberta-large-vocab.json",
     );
 }
@@ -93,17 +108,22 @@ impl BartVocabResources {
 impl BartMergesResources {
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART: (&'static str, &'static str) = (
-        "bart/merges.txt",
+        "bart/merges",
         "https://cdn.huggingface.co/roberta-large-merges.txt",
     );
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART_CNN: (&'static str, &'static str) = (
-        "bart-cnn/merges.txt",
+        "bart-cnn/merges",
         "https://cdn.huggingface.co/roberta-large-merges.txt",
     );
     /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
     pub const BART_XSUM: (&'static str, &'static str) = (
-        "bart-xsum/merges.txt",
+        "bart-xsum/merges",
+        "https://cdn.huggingface.co/roberta-large-merges.txt",
+    );
+    /// Shared under MIT license by the Facebook AI Research Fairseq team at https://github.com/pytorch/fairseq. Modified with conversion to C-array format.
+    pub const BART_MNLI: (&'static str, &'static str) = (
+        "bart-large-mnli/merges",
         "https://cdn.huggingface.co/roberta-large-merges.txt",
     );
 }
@@ -378,7 +398,6 @@ impl BartModel {
                 decoder_attention_mask,
             )
         };
-
         let (encoder_hidden_states, all_encoder_hidden_states, all_encoder_attentions) =
             match encoder_outputs {
                 Some(value) => value,
@@ -589,7 +608,11 @@ impl BartClassificationHead {
         P: Borrow<nn::Path<'p>>,
     {
         let p = p.borrow();
-
+        let num_labels = config
+            .id2label
+            .as_ref()
+            .expect("num_labels not provided in configuration")
+            .len() as i64;
         let dense = nn::linear(
             p / "dense",
             config.d_model,
@@ -600,7 +623,7 @@ impl BartClassificationHead {
         let out_proj = nn::linear(
             p / "out_proj",
             config.d_model,
-            config.num_labels.unwrap(),
+            num_labels,
             Default::default(),
         );
 
@@ -730,7 +753,7 @@ impl BartForSequenceClassification {
     ///    });
     /// ```
     pub fn forward_t(
-        &mut self,
+        &self,
         input_ids: &Tensor,
         attention_mask: Option<&Tensor>,
         encoder_outputs: Option<(Tensor, Option<Vec<Tensor>>, Option<Vec<Tensor>>)>,
@@ -753,7 +776,7 @@ impl BartForSequenceClassification {
             all_decoder_attentions,
             all_encoder_hidden_states,
             all_encoder_attentions,
-        ) = self.borrow_mut().base_model.forward_t(
+        ) = self.base_model.forward_t(
             Some(input_ids),
             attention_mask,
             decoder_input_ids,
@@ -762,10 +785,13 @@ impl BartForSequenceClassification {
             None,
             train,
         );
-
         let eos_mask = input_ids.eq(self.eos_token_id);
+        let reshape = eos_mask.sum1(&[1], true, Int64);
         let sentence_representation = decoder_outputs
-            .index_select(0, &eos_mask)
+            .permute(&[2, 0, 1])
+            .masked_select(&eos_mask)
+            .view((-1, reshape.size()[0] * reshape.int64_value(&[0, 0])))
+            .transpose(0, 1)
             .view((
                 decoder_outputs.size()[0],
                 -1,

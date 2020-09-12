@@ -14,13 +14,13 @@
 //! Pretrained models are available and can be downloaded using RemoteResources.
 //!
 //! ```no_run
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! #
 //! use rust_tokenizers::Gpt2Tokenizer;
 //! use tch::{nn, Device};
 //! # use std::path::PathBuf;
 //! use rust_bert::gpt2::{GPT2LMHeadModel, Gpt2Config};
-//! use rust_bert::resources::{download_resource, LocalResource, Resource};
+//! use rust_bert::resources::{LocalResource, Resource};
 //! use rust_bert::Config;
 //!
 //! let config_resource = Resource::Local(LocalResource {
@@ -35,10 +35,10 @@
 //! let weights_resource = Resource::Local(LocalResource {
 //!     local_path: PathBuf::from("path/to/model.ot"),
 //! });
-//! let config_path = download_resource(&config_resource)?;
-//! let vocab_path = download_resource(&vocab_resource)?;
-//! let merges_path = download_resource(&merges_resource)?;
-//! let weights_path = download_resource(&weights_resource)?;
+//! let config_path = config_resource.get_local_path()?;
+//! let vocab_path = vocab_resource.get_local_path()?;
+//! let merges_path = merges_resource.get_local_path()?;
+//! let weights_path = weights_resource.get_local_path()?;
 //!
 //! let device = Device::cuda_if_available();
 //! let mut vs = nn::VarStore::new(device);
@@ -46,7 +46,7 @@
 //!     vocab_path.to_str().unwrap(),
 //!     merges_path.to_str().unwrap(),
 //!     true,
-//! );
+//! )?;
 //! let config = Gpt2Config::from_file(config_path);
 //! let gpt2_model = GPT2LMHeadModel::new(&vs.root(), &config);
 //! vs.load(weights_path)?;

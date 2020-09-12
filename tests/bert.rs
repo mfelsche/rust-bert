@@ -1,5 +1,5 @@
+extern crate anyhow;
 extern crate dirs;
-extern crate failure;
 
 use rust_bert::bert::{
     BertConfig, BertConfigResources, BertForMaskedLM, BertForMultipleChoice,
@@ -11,14 +11,14 @@ use rust_bert::pipelines::ner::NERModel;
 use rust_bert::pipelines::question_answering::{
     QaInput, QuestionAnsweringConfig, QuestionAnsweringModel,
 };
-use rust_bert::resources::{download_resource, RemoteResource, Resource};
+use rust_bert::resources::{RemoteResource, Resource};
 use rust_bert::Config;
 use rust_tokenizers::{BertTokenizer, Tokenizer, TruncationStrategy, Vocab};
 use std::collections::HashMap;
 use tch::{nn, no_grad, Device, Tensor};
 
 #[test]
-fn bert_masked_lm() -> failure::Fallible<()> {
+fn bert_masked_lm() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource =
         Resource::Remote(RemoteResource::from_pretrained(BertConfigResources::BERT));
@@ -26,14 +26,15 @@ fn bert_masked_lm() -> failure::Fallible<()> {
         Resource::Remote(RemoteResource::from_pretrained(BertVocabResources::BERT));
     let weights_resource =
         Resource::Remote(RemoteResource::from_pretrained(BertModelResources::BERT));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
-    let weights_path = download_resource(&weights_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
+    let weights_path = weights_resource.get_local_path()?;
 
     //    Set-up masked LM model
     let device = Device::Cpu;
     let mut vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let config = BertConfig::from_file(config_path);
     let bert_model = BertForMaskedLM::new(&vs.root(), &config);
     vs.load(weights_path)?;
@@ -95,19 +96,20 @@ fn bert_masked_lm() -> failure::Fallible<()> {
 }
 
 #[test]
-fn bert_for_sequence_classification() -> failure::Fallible<()> {
+fn bert_for_sequence_classification() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource =
         Resource::Remote(RemoteResource::from_pretrained(BertConfigResources::BERT));
     let vocab_resource =
         Resource::Remote(RemoteResource::from_pretrained(BertVocabResources::BERT));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
 
     //    Set-up model
     let device = Device::Cpu;
     let vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let mut config = BertConfig::from_file(config_path);
     let mut dummy_label_mapping = HashMap::new();
     dummy_label_mapping.insert(0, String::from("Positive"));
@@ -159,19 +161,20 @@ fn bert_for_sequence_classification() -> failure::Fallible<()> {
 }
 
 #[test]
-fn bert_for_multiple_choice() -> failure::Fallible<()> {
+fn bert_for_multiple_choice() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource =
         Resource::Remote(RemoteResource::from_pretrained(BertConfigResources::BERT));
     let vocab_resource =
         Resource::Remote(RemoteResource::from_pretrained(BertVocabResources::BERT));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
 
     //    Set-up model
     let device = Device::Cpu;
     let vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let mut config = BertConfig::from_file(config_path);
     config.output_attentions = Some(true);
     config.output_hidden_states = Some(true);
@@ -220,19 +223,20 @@ fn bert_for_multiple_choice() -> failure::Fallible<()> {
 }
 
 #[test]
-fn bert_for_token_classification() -> failure::Fallible<()> {
+fn bert_for_token_classification() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource =
         Resource::Remote(RemoteResource::from_pretrained(BertConfigResources::BERT));
     let vocab_resource =
         Resource::Remote(RemoteResource::from_pretrained(BertVocabResources::BERT));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
 
     //    Set-up model
     let device = Device::Cpu;
     let vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let mut config = BertConfig::from_file(config_path);
     let mut dummy_label_mapping = HashMap::new();
     dummy_label_mapping.insert(0, String::from("O"));
@@ -285,19 +289,20 @@ fn bert_for_token_classification() -> failure::Fallible<()> {
 }
 
 #[test]
-fn bert_for_question_answering() -> failure::Fallible<()> {
+fn bert_for_question_answering() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource =
         Resource::Remote(RemoteResource::from_pretrained(BertConfigResources::BERT));
     let vocab_resource =
         Resource::Remote(RemoteResource::from_pretrained(BertVocabResources::BERT));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
 
     //    Set-up model
     let device = Device::Cpu;
     let vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let mut config = BertConfig::from_file(config_path);
     config.output_attentions = Some(true);
     config.output_hidden_states = Some(true);
@@ -345,7 +350,7 @@ fn bert_for_question_answering() -> failure::Fallible<()> {
 }
 
 #[test]
-fn bert_pre_trained_ner() -> failure::Fallible<()> {
+fn bert_pre_trained_ner() -> anyhow::Result<()> {
     //    Set-up model
     let ner_model = NERModel::new(Default::default())?;
 
@@ -380,7 +385,7 @@ fn bert_pre_trained_ner() -> failure::Fallible<()> {
 }
 
 #[test]
-fn bert_question_answering() -> failure::Fallible<()> {
+fn bert_question_answering() -> anyhow::Result<()> {
     //    Set-up question answering model
     let config = QuestionAnsweringConfig::new(
         ModelType::Bert,
@@ -390,7 +395,9 @@ fn bert_question_answering() -> failure::Fallible<()> {
         )),
         Resource::Remote(RemoteResource::from_pretrained(BertVocabResources::BERT_QA)),
         None, //merges resource only relevant with ModelType::Roberta
-        true, //lowercase
+        true,
+        true,
+        None,
     );
 
     let qa_model = QuestionAnsweringModel::new(config)?;

@@ -19,7 +19,7 @@
 //! use rust_bert::resources::{Resource,RemoteResource};
 //! use rust_bert::bert::{BertModelResources, BertVocabResources, BertConfigResources};
 //! use rust_bert::pipelines::common::ModelType;
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //!
 //! //Load a configuration
 //! use rust_bert::pipelines::token_classification::LabelAggregationOption;
@@ -29,6 +29,8 @@
 //!    Resource::Remote(RemoteResource::from_pretrained(BertConfigResources::BERT_NER)),
 //!    None, //merges resource only relevant with ModelType::Roberta
 //!    false, //lowercase
+//!    None, //strip_accents
+//!    None, //add_prefix_space
 //!    LabelAggregationOption::Mode
 //! );
 //!
@@ -113,7 +115,8 @@ use crate::albert::AlbertForTokenClassification;
 use crate::bert::{
     BertConfigResources, BertForTokenClassification, BertModelResources, BertVocabResources,
 };
-use crate::common::resources::{download_resource, RemoteResource, Resource};
+use crate::common::error::RustBertError;
+use crate::common::resources::{RemoteResource, Resource};
 use crate::distilbert::DistilBertForTokenClassification;
 use crate::electra::ElectraForTokenClassification;
 use crate::pipelines::common::{ConfigOption, ModelType, TokenizerOption};
@@ -210,6 +213,10 @@ pub struct TokenClassificationConfig {
     pub merges_resource: Option<Resource>,
     /// Automatically lower case all input upon tokenization (assumes a lower-cased model)
     pub lower_case: bool,
+    /// Flag indicating if the tokenizer should strip accents (normalization). Only used for BERT / ALBERT models
+    pub strip_accents: Option<bool>,
+    /// Flag indicating if the tokenizer should add a white space before each tokenized input (needed for some Roberta models)
+    pub add_prefix_space: Option<bool>,
     /// Device to place the model on (default: CUDA/GPU when available)
     pub device: Device,
     /// Sub-tokens aggregation method (default: `LabelAggregationOption::First`)
@@ -224,8 +231,8 @@ impl TokenClassificationConfig {
     /// * `model_type` - `ModelType` indicating the model type to load (must match with the actual data to be loaded!)
     /// * model - The `Resource` pointing to the model to load (e.g.  model.ot)
     /// * config - The `Resource' pointing to the model configuration to load (e.g. config.json)
-    /// * vocab - The `Resource' pointing to the tokenizer's vocabulary to load (e.g.  vocab.txt/vocab.json)
-    /// * vocab - An optional `Resource` tuple (`Option<Resource>`) pointing to the tokenizer's merge file to load (e.g.  merges.txt), needed only for Roberta.
+    /// * vocab - The `Resource' pointing to the tokenizers' vocabulary to load (e.g.  vocab.txt/vocab.json)
+    /// * vocab - An optional `Resource` tuple (`Option<Resource>`) pointing to the tokenizers' merge file to load (e.g.  merges.txt), needed only for Roberta.
     /// * lower_case - A `bool' indicating whether the tokenizer should lower case all input (in case of a lower-cased model)
     pub fn new(
         model_type: ModelType,
@@ -234,6 +241,8 @@ impl TokenClassificationConfig {
         vocab_resource: Resource,
         merges_resource: Option<Resource>,
         lower_case: bool,
+        strip_accents: impl Into<Option<bool>>,
+        add_prefix_space: impl Into<Option<bool>>,
         label_aggregation_function: LabelAggregationOption,
     ) -> TokenClassificationConfig {
         TokenClassificationConfig {
@@ -243,6 +252,8 @@ impl TokenClassificationConfig {
             vocab_resource,
             merges_resource,
             lower_case,
+            strip_accents: strip_accents.into(),
+            add_prefix_space: add_prefix_space.into(),
             device: Device::cuda_if_available(),
             label_aggregation_function,
         }
@@ -250,7 +261,7 @@ impl TokenClassificationConfig {
 }
 
 impl Default for TokenClassificationConfig {
-    /// Provides a default CONLL-2003 NER model (English)
+    /// Provides a default CoNLL-2003 NER model (English)
     fn default() -> TokenClassificationConfig {
         TokenClassificationConfig {
             model_type: ModelType::Bert,
@@ -265,6 +276,8 @@ impl Default for TokenClassificationConfig {
             )),
             merges_resource: None,
             lower_case: false,
+            strip_accents: None,
+            add_prefix_space: None,
             device: Device::cuda_if_available(),
             label_aggregation_function: LabelAggregationOption::First,
         }
@@ -356,6 +369,9 @@ impl TokenClassificationOption {
             }
             ModelType::T5 => {
                 panic!("TokenClassification not implemented for T5!");
+            }
+            ModelType::Bart => {
+                panic!("TokenClassification not implemented for BART!");
             }
         }
     }
@@ -459,19 +475,21 @@ impl TokenClassificationModel {
     /// # Example
     ///
     /// ```no_run
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// use rust_bert::pipelines::token_classification::TokenClassificationModel;
     ///
     /// let model = TokenClassificationModel::new(Default::default())?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(config: TokenClassificationConfig) -> failure::Fallible<TokenClassificationModel> {
-        let config_path = download_resource(&config.config_resource)?;
-        let vocab_path = download_resource(&config.vocab_resource)?;
-        let weights_path = download_resource(&config.model_resource)?;
+    pub fn new(
+        config: TokenClassificationConfig,
+    ) -> Result<TokenClassificationModel, RustBertError> {
+        let config_path = config.config_resource.get_local_path()?;
+        let vocab_path = config.vocab_resource.get_local_path()?;
+        let weights_path = config.model_resource.get_local_path()?;
         let merges_path = if let Some(merges_resource) = &config.merges_resource {
-            Some(download_resource(merges_resource).expect("Failure downloading resource"))
+            Some(merges_resource.get_local_path()?)
         } else {
             None
         };
@@ -481,9 +499,11 @@ impl TokenClassificationModel {
         let tokenizer = TokenizerOption::from_file(
             config.model_type,
             vocab_path.to_str().unwrap(),
-            merges_path.map(|path| path.to_str().unwrap()),
+            merges_path.as_deref().map(|path| path.to_str().unwrap()),
             config.lower_case,
-        );
+            config.strip_accents,
+            config.add_prefix_space,
+        )?;
         let mut var_store = VarStore::new(device);
         let model_config = ConfigOption::from_file(config.model_type, config_path);
         let token_sequence_classifier =
@@ -512,7 +532,12 @@ impl TokenClassificationModel {
             .iter()
             .map(|input| input.token_ids.clone())
             .map(|mut input| {
-                input.extend(vec![0; max_len - input.len()]);
+                input.extend(vec![
+                    self.tokenizer.get_pad_id().expect(
+                        "The Tokenizer used for token classification should contain a PAD id"
+                    );
+                    max_len - input.len()
+                ]);
                 input
             })
             .map(|input| Tensor::of_slice(&(input)))
@@ -538,7 +563,7 @@ impl TokenClassificationModel {
     /// # Example
     ///
     /// ```no_run
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// # use rust_bert::pipelines::token_classification::TokenClassificationModel;
     ///
     /// let ner_model = TokenClassificationModel::new(Default::default())?;

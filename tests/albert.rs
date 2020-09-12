@@ -1,19 +1,19 @@
+extern crate anyhow;
 extern crate dirs;
-extern crate failure;
 
 use rust_bert::albert::{
     AlbertConfig, AlbertConfigResources, AlbertForMaskedLM, AlbertForMultipleChoice,
     AlbertForQuestionAnswering, AlbertForSequenceClassification, AlbertForTokenClassification,
     AlbertModelResources, AlbertVocabResources,
 };
-use rust_bert::resources::{download_resource, RemoteResource, Resource};
+use rust_bert::resources::{RemoteResource, Resource};
 use rust_bert::Config;
 use rust_tokenizers::{AlbertTokenizer, Tokenizer, TruncationStrategy, Vocab};
 use std::collections::HashMap;
 use tch::{nn, no_grad, Device, Tensor};
 
 #[test]
-fn albert_masked_lm() -> failure::Fallible<()> {
+fn albert_masked_lm() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         AlbertConfigResources::ALBERT_BASE_V2,
@@ -24,15 +24,15 @@ fn albert_masked_lm() -> failure::Fallible<()> {
     let weights_resource = Resource::Remote(RemoteResource::from_pretrained(
         AlbertModelResources::ALBERT_BASE_V2,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
-    let weights_path = download_resource(&weights_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
+    let weights_path = weights_resource.get_local_path()?;
 
     //    Set-up masked LM model
     let device = Device::Cpu;
     let mut vs = nn::VarStore::new(device);
     let tokenizer: AlbertTokenizer =
-        AlbertTokenizer::from_file(vocab_path.to_str().unwrap(), true, false);
+        AlbertTokenizer::from_file(vocab_path.to_str().unwrap(), true, false)?;
     let config = AlbertConfig::from_file(config_path);
     let albert_model = AlbertForMaskedLM::new(&vs.root(), &config);
     vs.load(weights_path)?;
@@ -77,7 +77,7 @@ fn albert_masked_lm() -> failure::Fallible<()> {
 }
 
 #[test]
-fn albert_for_sequence_classification() -> failure::Fallible<()> {
+fn albert_for_sequence_classification() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         AlbertConfigResources::ALBERT_BASE_V2,
@@ -85,14 +85,14 @@ fn albert_for_sequence_classification() -> failure::Fallible<()> {
     let vocab_resource = Resource::Remote(RemoteResource::from_pretrained(
         AlbertVocabResources::ALBERT_BASE_V2,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
 
     //    Set-up model
     let device = Device::Cpu;
     let vs = nn::VarStore::new(device);
     let tokenizer: AlbertTokenizer =
-        AlbertTokenizer::from_file(vocab_path.to_str().unwrap(), true, false);
+        AlbertTokenizer::from_file(vocab_path.to_str().unwrap(), true, false)?;
     let mut config = AlbertConfig::from_file(config_path);
     let mut dummy_label_mapping = HashMap::new();
     dummy_label_mapping.insert(0, String::from("Positive"));
@@ -144,7 +144,7 @@ fn albert_for_sequence_classification() -> failure::Fallible<()> {
 }
 
 #[test]
-fn albert_for_multiple_choice() -> failure::Fallible<()> {
+fn albert_for_multiple_choice() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         AlbertConfigResources::ALBERT_BASE_V2,
@@ -152,14 +152,14 @@ fn albert_for_multiple_choice() -> failure::Fallible<()> {
     let vocab_resource = Resource::Remote(RemoteResource::from_pretrained(
         AlbertVocabResources::ALBERT_BASE_V2,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
 
     //    Set-up model
     let device = Device::Cpu;
     let vs = nn::VarStore::new(device);
     let tokenizer: AlbertTokenizer =
-        AlbertTokenizer::from_file(vocab_path.to_str().unwrap(), true, false);
+        AlbertTokenizer::from_file(vocab_path.to_str().unwrap(), true, false)?;
     let mut config = AlbertConfig::from_file(config_path);
     config.output_attentions = Some(true);
     config.output_hidden_states = Some(true);
@@ -211,7 +211,7 @@ fn albert_for_multiple_choice() -> failure::Fallible<()> {
 }
 
 #[test]
-fn albert_for_token_classification() -> failure::Fallible<()> {
+fn albert_for_token_classification() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         AlbertConfigResources::ALBERT_BASE_V2,
@@ -219,14 +219,14 @@ fn albert_for_token_classification() -> failure::Fallible<()> {
     let vocab_resource = Resource::Remote(RemoteResource::from_pretrained(
         AlbertVocabResources::ALBERT_BASE_V2,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
 
     //    Set-up model
     let device = Device::Cpu;
     let vs = nn::VarStore::new(device);
     let tokenizer: AlbertTokenizer =
-        AlbertTokenizer::from_file(vocab_path.to_str().unwrap(), true, false);
+        AlbertTokenizer::from_file(vocab_path.to_str().unwrap(), true, false)?;
     let mut config = AlbertConfig::from_file(config_path);
     let mut dummy_label_mapping = HashMap::new();
     dummy_label_mapping.insert(0, String::from("O"));
@@ -279,7 +279,7 @@ fn albert_for_token_classification() -> failure::Fallible<()> {
 }
 
 #[test]
-fn albert_for_question_answering() -> failure::Fallible<()> {
+fn albert_for_question_answering() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         AlbertConfigResources::ALBERT_BASE_V2,
@@ -287,14 +287,14 @@ fn albert_for_question_answering() -> failure::Fallible<()> {
     let vocab_resource = Resource::Remote(RemoteResource::from_pretrained(
         AlbertVocabResources::ALBERT_BASE_V2,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
 
     //    Set-up model
     let device = Device::Cpu;
     let vs = nn::VarStore::new(device);
     let tokenizer: AlbertTokenizer =
-        AlbertTokenizer::from_file(vocab_path.to_str().unwrap(), true, false);
+        AlbertTokenizer::from_file(vocab_path.to_str().unwrap(), true, false)?;
     let mut config = AlbertConfig::from_file(config_path);
     config.output_attentions = Some(true);
     config.output_hidden_states = Some(true);

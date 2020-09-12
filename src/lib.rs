@@ -10,6 +10,7 @@
 //!     - Translation
 //!     - Summarization
 //!     - Multi-turn dialogue
+//!     - Zero-shot classification
 //!     - Sentiment Analysis
 //!     - Named Entity Recognition
 //!     - Question-Answering
@@ -19,7 +20,7 @@
 //! ```no_run
 //! use rust_bert::pipelines::question_answering::{QaInput, QuestionAnsweringModel};
 //!
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! let qa_model = QuestionAnsweringModel::new(Default::default())?;
 //!
 //! let question = String::from("Where does Amy live ?");
@@ -33,7 +34,7 @@
 //!  | |**DistilBERT**|**BERT**|**RoBERTa**|**GPT**|**GPT2**|**BART**|**Electra**|**Marian**|**ALBERT**|**T5**
 //! :-----:|:----:|:----:|:----:|:----:|:----:|:----:|:----:|:----:|:----:|:----:
 //! Masked LM|✅ |✅ |✅ | | | |✅| |✅ | |
-//! Sequence classification|✅ |✅ |✅| | | | | |✅ | |
+//! Sequence classification|✅ |✅ |✅| | |✅| | |✅ | |
 //! Token classification|✅ |✅ | ✅| | | |✅| |✅ | |
 //! Question answering|✅ |✅ |✅| | | | | |✅ | |
 //! Multiple choices| |✅ |✅| | | | | |✅ | |
@@ -70,5 +71,6 @@ pub mod pipelines;
 pub mod roberta;
 pub mod t5;
 
+pub use common::error::RustBertError;
 pub use common::resources;
 pub use common::Config;

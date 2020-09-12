@@ -2,13 +2,13 @@ use rust_bert::electra::{
     ElectraConfig, ElectraConfigResources, ElectraDiscriminator, ElectraForMaskedLM,
     ElectraModelResources, ElectraVocabResources,
 };
-use rust_bert::resources::{download_resource, RemoteResource, Resource};
+use rust_bert::resources::{RemoteResource, Resource};
 use rust_bert::Config;
 use rust_tokenizers::{BertTokenizer, Tokenizer, TruncationStrategy, Vocab};
 use tch::{nn, no_grad, Device, Tensor};
 
 #[test]
-fn electra_masked_lm() -> failure::Fallible<()> {
+fn electra_masked_lm() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         ElectraConfigResources::BASE_GENERATOR,
@@ -19,14 +19,15 @@ fn electra_masked_lm() -> failure::Fallible<()> {
     let weights_resource = Resource::Remote(RemoteResource::from_pretrained(
         ElectraModelResources::BASE_GENERATOR,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
-    let weights_path = download_resource(&weights_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
+    let weights_path = weights_resource.get_local_path()?;
 
     //    Set-up masked LM model
     let device = Device::Cpu;
     let mut vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let mut config = ElectraConfig::from_file(config_path);
     config.output_attentions = Some(true);
     config.output_hidden_states = Some(true);
@@ -81,7 +82,7 @@ fn electra_masked_lm() -> failure::Fallible<()> {
 }
 
 #[test]
-fn electra_discriminator() -> failure::Fallible<()> {
+fn electra_discriminator() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         ElectraConfigResources::BASE_DISCRIMINATOR,
@@ -92,14 +93,15 @@ fn electra_discriminator() -> failure::Fallible<()> {
     let weights_resource = Resource::Remote(RemoteResource::from_pretrained(
         ElectraModelResources::BASE_DISCRIMINATOR,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
-    let weights_path = download_resource(&weights_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
+    let weights_path = weights_resource.get_local_path()?;
 
     //    Set-up masked LM model
     let device = Device::Cpu;
     let mut vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let config = ElectraConfig::from_file(config_path);
     let electra_model = ElectraDiscriminator::new(&vs.root(), &config);
     vs.load(weights_path)?;

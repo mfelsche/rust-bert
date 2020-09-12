@@ -5,7 +5,7 @@ use rust_bert::distilbert::{
 };
 use rust_bert::pipelines::question_answering::{QaInput, QuestionAnsweringModel};
 use rust_bert::pipelines::sentiment::{SentimentModel, SentimentPolarity};
-use rust_bert::resources::{download_resource, RemoteResource, Resource};
+use rust_bert::resources::{RemoteResource, Resource};
 use rust_bert::Config;
 use rust_tokenizers::bert_tokenizer::BertTokenizer;
 use rust_tokenizers::preprocessing::tokenizer::base_tokenizer::{Tokenizer, TruncationStrategy};
@@ -13,10 +13,10 @@ use rust_tokenizers::preprocessing::vocab::base_vocab::Vocab;
 use std::collections::HashMap;
 use tch::{nn, no_grad, Device, Tensor};
 
-extern crate failure;
+extern crate anyhow;
 
 #[test]
-fn distilbert_sentiment_classifier() -> failure::Fallible<()> {
+fn distilbert_sentiment_classifier() -> anyhow::Result<()> {
     //    Set-up classifier
     let sentiment_classifier = SentimentModel::new(Default::default())?;
 
@@ -41,7 +41,7 @@ fn distilbert_sentiment_classifier() -> failure::Fallible<()> {
 }
 
 #[test]
-fn distilbert_masked_lm() -> failure::Fallible<()> {
+fn distilbert_masked_lm() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         DistilBertConfigResources::DISTIL_BERT,
@@ -52,14 +52,15 @@ fn distilbert_masked_lm() -> failure::Fallible<()> {
     let weights_resource = Resource::Remote(RemoteResource::from_pretrained(
         DistilBertModelResources::DISTIL_BERT,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
-    let weights_path = download_resource(&weights_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
+    let weights_path = weights_resource.get_local_path()?;
 
     //    Set-up masked LM model
     let device = Device::cuda_if_available();
     let mut vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let config = DistilBertConfig::from_file(config_path);
     let distil_bert_model = DistilBertModelMaskedLM::new(&vs.root(), &config);
     vs.load(weights_path)?;
@@ -114,7 +115,7 @@ fn distilbert_masked_lm() -> failure::Fallible<()> {
 }
 
 #[test]
-fn distilbert_for_question_answering() -> failure::Fallible<()> {
+fn distilbert_for_question_answering() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         DistilBertConfigResources::DISTIL_BERT_SQUAD,
@@ -122,13 +123,14 @@ fn distilbert_for_question_answering() -> failure::Fallible<()> {
     let vocab_resource = Resource::Remote(RemoteResource::from_pretrained(
         DistilBertVocabResources::DISTIL_BERT_SQUAD,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
 
     //    Set-up masked LM model
     let device = Device::cuda_if_available();
     let vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let mut config = DistilBertConfig::from_file(config_path);
     config.output_attentions = Some(true);
     config.output_hidden_states = Some(true);
@@ -173,7 +175,7 @@ fn distilbert_for_question_answering() -> failure::Fallible<()> {
 }
 
 #[test]
-fn distilbert_for_token_classification() -> failure::Fallible<()> {
+fn distilbert_for_token_classification() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         DistilBertConfigResources::DISTIL_BERT,
@@ -181,13 +183,14 @@ fn distilbert_for_token_classification() -> failure::Fallible<()> {
     let vocab_resource = Resource::Remote(RemoteResource::from_pretrained(
         DistilBertVocabResources::DISTIL_BERT,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
 
     //    Set-up masked LM model
     let device = Device::cuda_if_available();
     let vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let mut config = DistilBertConfig::from_file(config_path);
     config.output_attentions = Some(true);
     config.output_hidden_states = Some(true);
@@ -237,7 +240,7 @@ fn distilbert_for_token_classification() -> failure::Fallible<()> {
 }
 
 #[test]
-fn distilbert_question_answering() -> failure::Fallible<()> {
+fn distilbert_question_answering() -> anyhow::Result<()> {
     //    Set-up question answering model
     let qa_model = QuestionAnsweringModel::new(Default::default())?;
 

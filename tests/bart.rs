@@ -3,14 +3,17 @@ use rust_bert::bart::{
     BartVocabResources,
 };
 use rust_bert::pipelines::summarization::{SummarizationConfig, SummarizationModel};
-use rust_bert::resources::{download_resource, RemoteResource, Resource};
+use rust_bert::pipelines::zero_shot_classification::{
+    ZeroShotClassificationConfig, ZeroShotClassificationModel,
+};
+use rust_bert::resources::{RemoteResource, Resource};
 use rust_bert::Config;
 use rust_tokenizers::{RobertaTokenizer, Tokenizer, TruncationStrategy};
 use tch::{nn, Device, Tensor};
 
 #[test]
 #[cfg_attr(not(feature = "all-tests"), ignore)]
-fn bart_lm_model() -> failure::Fallible<()> {
+fn bart_lm_model() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource =
         Resource::Remote(RemoteResource::from_pretrained(BartConfigResources::BART));
@@ -20,10 +23,10 @@ fn bart_lm_model() -> failure::Fallible<()> {
         Resource::Remote(RemoteResource::from_pretrained(BartMergesResources::BART));
     let weights_resource =
         Resource::Remote(RemoteResource::from_pretrained(BartModelResources::BART));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
-    let merges_path = download_resource(&merges_resource)?;
-    let weights_path = download_resource(&weights_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
+    let merges_path = merges_resource.get_local_path()?;
+    let weights_path = weights_resource.get_local_path()?;
 
     //    Set-up masked LM model
     let device = Device::Cpu;
@@ -32,7 +35,8 @@ fn bart_lm_model() -> failure::Fallible<()> {
         vocab_path.to_str().unwrap(),
         merges_path.to_str().unwrap(),
         false,
-    );
+        false,
+    )?;
     let config = BartConfig::from_file(config_path);
     let bart_model = BartModel::new(&vs.root(), &config, false);
     vs.load(weights_path)?;
@@ -63,13 +67,13 @@ fn bart_lm_model() -> failure::Fallible<()> {
 
     assert_eq!(output.size(), vec!(1, 6, 1024));
     assert_eq!(encoder_outputs.size(), vec!(1, 6, 1024));
-    assert!((output.double_value(&[0, output.size()[1] - 1, 0]) - (-0.2420)).abs() < 1e-4);
+    assert!((output.double_value(&[0, 0, 0]) - 0.7877).abs() < 1e-4);
     Ok(())
 }
 
 #[test]
 #[cfg_attr(not(feature = "all-tests"), ignore)]
-fn bart_summarization_greedy() -> failure::Fallible<()> {
+fn bart_summarization_greedy() -> anyhow::Result<()> {
     //    Set-up masked LM model
     let summarization_config = SummarizationConfig {
         num_beams: 1,
@@ -104,16 +108,16 @@ about exoplanets like K2-18b."];
     let output = model.summarize(&input);
 
     assert_eq!(output.len(), 1);
-    assert_eq!(output[0], "Scientists have found water vapour on K2-18b, a planet 110 light-years from Earth. This \
-    is the first such discovery in a planet in its star's habitable zone. The planet is not too hot and not too cold \
-    for liquid water to exist.");
+    assert_eq!(output[0], "K2-18b is the first discovery of water on a planet in its star's habitable zone. \
+    Scientists found water vapour in the atmosphere of the planet. The planet is 110 light-years from Earth \
+    and is not too hot or cold for liquid water to exist.");
 
     Ok(())
 }
 
 #[test]
 #[cfg_attr(not(feature = "all-tests"), ignore)]
-fn bart_summarization_beam_search() -> failure::Fallible<()> {
+fn bart_summarization_beam_search() -> anyhow::Result<()> {
     //    Set-up masked LM model
     let summarization_config = SummarizationConfig {
         num_beams: 3,
@@ -153,5 +157,85 @@ about exoplanets like K2-18b."];
     Montreal team used data from the NASA's Hubble telescope to assess changes in the light coming from the \
     star as the planet passed between it and Earth.");
 
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(not(feature = "all-tests"), ignore)]
+fn bart_zero_shot_classification() -> anyhow::Result<()> {
+    //    Set-up model model
+    let zero_shot_config = ZeroShotClassificationConfig {
+        device: Device::Cpu,
+        ..Default::default()
+    };
+    let sequence_classification_model = ZeroShotClassificationModel::new(zero_shot_config)?;
+
+    let input_sentence = "Who are you voting for in 2020?";
+    let input_sequence_2 = "The prime minister has announced a stimulus package which was widely criticized by the opposition.";
+    let candidate_labels = &["politics", "public health", "economy", "sports"];
+
+    let output = sequence_classification_model.predict(
+        &[input_sentence, input_sequence_2],
+        candidate_labels,
+        Some(Box::new(|label: &str| {
+            format!("This example is about {}.", label)
+        })),
+        128,
+    );
+
+    assert_eq!(output.len(), 2);
+
+    // Prediction scores
+    assert_eq!(output[0].text, "politics");
+    assert!((output[0].score - 0.9630).abs() < 1e-4);
+    assert_eq!(output[1].text, "economy");
+    assert!((output[1].score - 0.6416).abs() < 1e-4);
+    Ok(())
+}
+
+#[test]
+#[cfg_attr(not(feature = "all-tests"), ignore)]
+fn bart_zero_shot_classification_multilabel() -> anyhow::Result<()> {
+    //    Set-up model model
+    let zero_shot_config = ZeroShotClassificationConfig {
+        device: Device::Cpu,
+        ..Default::default()
+    };
+    let sequence_classification_model = ZeroShotClassificationModel::new(zero_shot_config)?;
+
+    let input_sentence = "Who are you voting for in 2020?";
+    let input_sequence_2 = "The prime minister has announced a stimulus package which was widely criticized by the opposition.";
+    let candidate_labels = &["politics", "public health", "economy", "sports"];
+
+    let output = sequence_classification_model.predict_multilabel(
+        &[input_sentence, input_sequence_2],
+        candidate_labels,
+        Some(Box::new(|label: &str| {
+            format!("This example is about {}.", label)
+        })),
+        128,
+    );
+
+    assert_eq!(output.len(), 2);
+    assert_eq!(output[0].len(), candidate_labels.len());
+    // First sentence label scores
+    assert_eq!(output[0][0].text, "politics");
+    assert!((output[0][0].score - 0.9805).abs() < 1e-4);
+    assert_eq!(output[0][1].text, "public health");
+    assert!((output[0][1].score - 0.0130).abs() < 1e-4);
+    assert_eq!(output[0][2].text, "economy");
+    assert!((output[0][2].score - 0.0255).abs() < 1e-4);
+    assert_eq!(output[0][3].text, "sports");
+    assert!((output[0][3].score - 0.0013).abs() < 1e-4);
+
+    // Second sentence label scores
+    assert_eq!(output[1][0].text, "politics");
+    assert!((output[1][0].score - 0.9432).abs() < 1e-4);
+    assert_eq!(output[1][1].text, "public health");
+    assert!((output[1][1].score - 0.0045).abs() < 1e-4);
+    assert_eq!(output[1][2].text, "economy");
+    assert!((output[1][2].score - 0.9851).abs() < 1e-4);
+    assert_eq!(output[1][3].text, "sports");
+    assert!((output[1][3].score - 0.0004).abs() < 1e-4);
     Ok(())
 }

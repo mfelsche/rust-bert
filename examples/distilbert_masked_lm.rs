@@ -9,20 +9,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-extern crate failure;
+extern crate anyhow;
 
 use rust_bert::distilbert::{
     DistilBertConfig, DistilBertConfigResources, DistilBertModelMaskedLM, DistilBertModelResources,
     DistilBertVocabResources,
 };
-use rust_bert::resources::{download_resource, RemoteResource, Resource};
+use rust_bert::resources::{RemoteResource, Resource};
 use rust_bert::Config;
 use rust_tokenizers::bert_tokenizer::BertTokenizer;
 use rust_tokenizers::preprocessing::tokenizer::base_tokenizer::{Tokenizer, TruncationStrategy};
 use rust_tokenizers::preprocessing::vocab::base_vocab::Vocab;
 use tch::{nn, no_grad, Device, Tensor};
 
-fn main() -> failure::Fallible<()> {
+fn main() -> anyhow::Result<()> {
     //    Resources paths
     let config_resource = Resource::Remote(RemoteResource::from_pretrained(
         DistilBertConfigResources::DISTIL_BERT,
@@ -33,14 +33,15 @@ fn main() -> failure::Fallible<()> {
     let weights_resource = Resource::Remote(RemoteResource::from_pretrained(
         DistilBertModelResources::DISTIL_BERT,
     ));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
-    let weights_path = download_resource(&weights_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
+    let weights_path = weights_resource.get_local_path()?;
 
     //    Set-up masked LM model
     let device = Device::Cpu;
     let mut vs = nn::VarStore::new(device);
-    let tokenizer: BertTokenizer = BertTokenizer::from_file(vocab_path.to_str().unwrap(), true);
+    let tokenizer: BertTokenizer =
+        BertTokenizer::from_file(vocab_path.to_str().unwrap(), true, true)?;
     let config = DistilBertConfig::from_file(config_path);
     let distil_bert_model = DistilBertModelMaskedLM::new(&vs.root(), &config);
     vs.load(weights_path)?;

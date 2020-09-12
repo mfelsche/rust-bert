@@ -10,19 +10,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate failure;
+extern crate anyhow;
 
 use rust_bert::gpt2::{
     GPT2LMHeadModel, Gpt2Config, Gpt2ConfigResources, Gpt2MergesResources, Gpt2ModelResources,
     Gpt2VocabResources,
 };
 use rust_bert::pipelines::generation::{Cache, LMHeadModel};
-use rust_bert::resources::{download_resource, RemoteResource, Resource};
+use rust_bert::resources::{RemoteResource, Resource};
 use rust_bert::Config;
 use rust_tokenizers::{Gpt2Tokenizer, Tokenizer, TruncationStrategy};
 use tch::{nn, Device, Tensor};
 
-fn main() -> failure::Fallible<()> {
+fn main() -> anyhow::Result<()> {
     //    Resources set-up
     let config_resource =
         Resource::Remote(RemoteResource::from_pretrained(Gpt2ConfigResources::GPT2));
@@ -32,10 +32,10 @@ fn main() -> failure::Fallible<()> {
         Resource::Remote(RemoteResource::from_pretrained(Gpt2MergesResources::GPT2));
     let weights_resource =
         Resource::Remote(RemoteResource::from_pretrained(Gpt2ModelResources::GPT2));
-    let config_path = download_resource(&config_resource)?;
-    let vocab_path = download_resource(&vocab_resource)?;
-    let merges_path = download_resource(&merges_resource)?;
-    let weights_path = download_resource(&weights_resource)?;
+    let config_path = config_resource.get_local_path()?;
+    let vocab_path = vocab_resource.get_local_path()?;
+    let merges_path = merges_resource.get_local_path()?;
+    let weights_path = weights_resource.get_local_path()?;
 
     //    Set-up masked LM model
     let device = Device::Cpu;
@@ -44,7 +44,7 @@ fn main() -> failure::Fallible<()> {
         vocab_path.to_str().unwrap(),
         merges_path.to_str().unwrap(),
         false,
-    );
+    )?;
     let config = Gpt2Config::from_file(config_path);
     let gpt2_model = GPT2LMHeadModel::new(&vs.root(), &config);
     vs.load(weights_path)?;

@@ -17,7 +17,7 @@ use rust_bert::pipelines::token_classification::{
 };
 use rust_bert::resources::{RemoteResource, Resource};
 
-fn main() -> failure::Fallible<()> {
+fn main() -> anyhow::Result<()> {
     //    Load a configuration
     let config = TokenClassificationConfig::new(
         ModelType::Bert,
@@ -32,6 +32,8 @@ fn main() -> failure::Fallible<()> {
         )),
         None,  //merges resource only relevant with ModelType::Roberta
         false, //lowercase
+        false,
+        None,
         LabelAggregationOption::Mode,
     );
 

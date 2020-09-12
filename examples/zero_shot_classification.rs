@@ -12,24 +12,26 @@
 
 extern crate anyhow;
 
-use rust_bert::pipelines::sequence_classification::SequenceClassificationModel;
+use rust_bert::pipelines::zero_shot_classification::ZeroShotClassificationModel;
 
 fn main() -> anyhow::Result<()> {
     //    Set-up model
-    let sequence_classification_model = SequenceClassificationModel::new(Default::default())?;
+    let sequence_classification_model = ZeroShotClassificationModel::new(Default::default())?;
 
-    //    Define input
-    let input = [
-        "Probably my all-time favorite movie, a story of selflessness, sacrifice and dedication to a noble cause, but it's not preachy or boring.",
-        "This is a neutral sentence.",
-        "If you like original gut wrenching laughter you will like this movie. If you are young or old then you will love this movie, hell even my mom liked it.",
-    ];
+    let input_sentence = "Who are you voting for in 2020?";
+    let input_sequence_2 = "The prime minister has announced a stimulus package which was widely criticized by the opposition.";
+    let candidate_labels = &["politics", "public health", "economy", "sports"];
 
-    //    Run model
-    let output = sequence_classification_model.predict_multilabel(&input, 0.05);
-    for label in output {
-        println!("{:?}", label);
-    }
+    let output = sequence_classification_model.predict_multilabel(
+        &[input_sentence, input_sequence_2],
+        candidate_labels,
+        Some(Box::new(|label: &str| {
+            format!("This example is about {}.", label)
+        })),
+        128,
+    );
+
+    println!("{:?}", output);
 
     Ok(())
 }

@@ -10,14 +10,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate anyhow;
 extern crate dirs;
-extern crate failure;
 
-use rust_bert::pipelines::sentiment::{ss2_processor, SentimentModel};
-use std::env;
+use rust_bert::pipelines::sentiment::SentimentModel;
+use serde::Deserialize;
+use std::error::Error;
 use std::path::PathBuf;
+use std::{env, fs};
 
-fn main() -> failure::Fallible<()> {
+#[derive(Debug, Deserialize)]
+struct Record {
+    sentence: String,
+    label: i8,
+}
+
+fn ss2_processor(file_path: PathBuf) -> Result<Vec<String>, Box<dyn Error>> {
+    let file = fs::File::open(file_path).expect("unable to open file");
+    let mut csv = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .delimiter(b'\t')
+        .from_reader(file);
+    let mut records = Vec::new();
+    for result in csv.deserialize() {
+        let record: Record = result?;
+        records.push(record.sentence);
+    }
+    Ok(records)
+}
+
+fn main() -> anyhow::Result<()> {
     //    Set-up classifier
     let sentiment_classifier = SentimentModel::new(Default::default())?;
 

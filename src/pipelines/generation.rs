@@ -23,7 +23,7 @@
 //! The dependencies will be downloaded to the user's home directory, under ~/rustbert/gpt2 (~/rustbert/openai-gpt respectively)
 //!
 //! ```no_run
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! use rust_bert::pipelines::generation::{GPT2Generator, GenerateConfig, LanguageGenerator};
 //!
 //! let generate_config = GenerateConfig {
@@ -62,7 +62,8 @@ use crate::bart::{
     BartConfig, BartConfigResources, BartForConditionalGeneration, BartMergesResources,
     BartModelResources, BartVocabResources, LayerState as BartLayerState,
 };
-use crate::common::resources::{download_resource, RemoteResource, Resource};
+use crate::common::error::RustBertError;
+use crate::common::resources::{RemoteResource, Resource};
 use crate::gpt2::{
     GPT2LMHeadModel, Gpt2Config, Gpt2ConfigResources, Gpt2MergesResources, Gpt2ModelResources,
     Gpt2VocabResources,
@@ -227,7 +228,7 @@ impl OpenAIGenerator {
     /// # Example
     ///
     /// ```no_run
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// use rust_bert::pipelines::generation::{GenerateConfig, OpenAIGenerator};
     /// let generate_config = GenerateConfig {
     ///     max_length: 30,
@@ -241,7 +242,7 @@ impl OpenAIGenerator {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(generate_config: GenerateConfig) -> failure::Fallible<OpenAIGenerator> {
+    pub fn new(generate_config: GenerateConfig) -> Result<OpenAIGenerator, RustBertError> {
         generate_config.validate();
 
         //        The following allow keeping the same GenerationConfig Default for GPT, GPT2 and BART models
@@ -285,10 +286,10 @@ impl OpenAIGenerator {
             generate_config.merges_resource.clone()
         };
 
-        let config_path = download_resource(&config_resource)?;
-        let vocab_path = download_resource(&vocab_resource)?;
-        let merges_path = download_resource(&merges_resource)?;
-        let weights_path = download_resource(&model_resource)?;
+        let config_path = config_resource.get_local_path()?;
+        let vocab_path = vocab_resource.get_local_path()?;
+        let merges_path = merges_resource.get_local_path()?;
+        let weights_path = model_resource.get_local_path()?;
         let device = generate_config.device;
 
         let mut var_store = nn::VarStore::new(device);
@@ -296,7 +297,7 @@ impl OpenAIGenerator {
             vocab_path.to_str().unwrap(),
             merges_path.to_str().unwrap(),
             true,
-        );
+        )?;
         let config = Gpt2Config::from_file(config_path);
         let model = OpenAIGPTLMHeadModel::new(&var_store.root(), &config);
         var_store.load(weights_path)?;
@@ -387,7 +388,7 @@ impl GPT2Generator {
     /// # Example
     ///
     /// ```no_run
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// use rust_bert::pipelines::generation::{GPT2Generator, GenerateConfig};
     ///
     /// let generate_config = GenerateConfig {
@@ -402,11 +403,11 @@ impl GPT2Generator {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(generate_config: GenerateConfig) -> failure::Fallible<GPT2Generator> {
-        let config_path = download_resource(&generate_config.config_resource)?;
-        let vocab_path = download_resource(&generate_config.vocab_resource)?;
-        let merges_path = download_resource(&generate_config.merges_resource)?;
-        let weights_path = download_resource(&generate_config.model_resource)?;
+    pub fn new(generate_config: GenerateConfig) -> Result<GPT2Generator, RustBertError> {
+        let config_path = generate_config.config_resource.get_local_path()?;
+        let vocab_path = generate_config.vocab_resource.get_local_path()?;
+        let merges_path = generate_config.merges_resource.get_local_path()?;
+        let weights_path = generate_config.model_resource.get_local_path()?;
         let device = generate_config.device;
 
         generate_config.validate();
@@ -415,7 +416,7 @@ impl GPT2Generator {
             vocab_path.to_str().unwrap(),
             merges_path.to_str().unwrap(),
             false,
-        );
+        )?;
         let config = Gpt2Config::from_file(config_path);
         let model = GPT2LMHeadModel::new(&var_store.root(), &config);
         var_store.load(weights_path)?;
@@ -551,7 +552,7 @@ impl BartGenerator {
     /// ```no_run
     /// # use std::path::PathBuf;
     /// # use tch::Device;
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// use rust_bert::pipelines::generation::{BartGenerator, GenerateConfig};
     /// # let mut home: PathBuf = dirs::home_dir().unwrap();
     /// # home.push("rustbert");
@@ -573,7 +574,7 @@ impl BartGenerator {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(generate_config: GenerateConfig) -> failure::Fallible<BartGenerator> {
+    pub fn new(generate_config: GenerateConfig) -> Result<BartGenerator, RustBertError> {
         //        The following allow keeping the same GenerationConfig Default for GPT, GPT2 and BART models
         let model_resource = if &generate_config.model_resource
             == &Resource::Remote(RemoteResource::from_pretrained(Gpt2ModelResources::GPT2))
@@ -607,10 +608,10 @@ impl BartGenerator {
             generate_config.merges_resource.clone()
         };
 
-        let config_path = download_resource(&config_resource)?;
-        let vocab_path = download_resource(&vocab_resource)?;
-        let merges_path = download_resource(&merges_resource)?;
-        let weights_path = download_resource(&model_resource)?;
+        let config_path = config_resource.get_local_path()?;
+        let vocab_path = vocab_resource.get_local_path()?;
+        let merges_path = merges_resource.get_local_path()?;
+        let weights_path = model_resource.get_local_path()?;
         let device = generate_config.device;
 
         generate_config.validate();
@@ -619,7 +620,8 @@ impl BartGenerator {
             vocab_path.to_str().unwrap(),
             merges_path.to_str().unwrap(),
             false,
-        );
+            false,
+        )?;
         let config = BartConfig::from_file(config_path);
         let model = BartForConditionalGeneration::new(&var_store.root(), &config, true);
         var_store.load(weights_path)?;
@@ -857,7 +859,7 @@ impl MarianGenerator {
     /// ```no_run
     /// # use std::path::PathBuf;
     /// # use tch::Device;
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// use rust_bert::pipelines::generation::{GenerateConfig, MarianGenerator};
     /// # let mut home: PathBuf = dirs::home_dir().unwrap();
     /// # home.push("rustbert");
@@ -879,11 +881,11 @@ impl MarianGenerator {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(generate_config: GenerateConfig) -> failure::Fallible<MarianGenerator> {
-        let config_path = download_resource(&generate_config.config_resource)?;
-        let vocab_path = download_resource(&generate_config.vocab_resource)?;
-        let sentence_piece_path = download_resource(&generate_config.merges_resource)?;
-        let weights_path = download_resource(&generate_config.model_resource)?;
+    pub fn new(generate_config: GenerateConfig) -> Result<MarianGenerator, RustBertError> {
+        let config_path = generate_config.config_resource.get_local_path()?;
+        let vocab_path = generate_config.vocab_resource.get_local_path()?;
+        let sentence_piece_path = generate_config.merges_resource.get_local_path()?;
+        let weights_path = generate_config.model_resource.get_local_path()?;
         let device = generate_config.device;
 
         generate_config.validate();
@@ -892,7 +894,7 @@ impl MarianGenerator {
             vocab_path.to_str().unwrap(),
             sentence_piece_path.to_str().unwrap(),
             false,
-        );
+        )?;
         let config = BartConfig::from_file(config_path);
         let model = MarianForConditionalGeneration::new(&var_store.root(), &config, true);
         var_store.load(weights_path)?;
@@ -1116,7 +1118,7 @@ pub struct T5Generator {
 }
 
 impl T5Generator {
-    pub fn new(generate_config: GenerateConfig) -> failure::Fallible<T5Generator> {
+    pub fn new(generate_config: GenerateConfig) -> Result<T5Generator, RustBertError> {
         //        The following allow keeping the same GenerationConfig Default for GPT, GPT2 and BART models
         let model_resource = if &generate_config.model_resource
             == &Resource::Remote(RemoteResource::from_pretrained(Gpt2ModelResources::GPT2))
@@ -1142,14 +1144,14 @@ impl T5Generator {
             generate_config.vocab_resource.clone()
         };
 
-        let config_path = download_resource(&config_resource)?;
-        let vocab_path = download_resource(&vocab_resource)?;
-        let weights_path = download_resource(&model_resource)?;
+        let config_path = config_resource.get_local_path()?;
+        let vocab_path = vocab_resource.get_local_path()?;
+        let weights_path = model_resource.get_local_path()?;
         let device = generate_config.device;
 
         generate_config.validate();
         let mut var_store = nn::VarStore::new(device);
-        let tokenizer = T5Tokenizer::from_file(vocab_path.to_str().unwrap(), false);
+        let tokenizer = T5Tokenizer::from_file(vocab_path.to_str().unwrap(), false)?;
         let config = T5Config::from_file(config_path);
         let model = T5ForConditionalGeneration::new(&var_store.root(), &config, false, false);
         var_store.load(weights_path)?;
@@ -2211,7 +2213,7 @@ pub trait LanguageGenerator<T: LMHeadModel, V: Vocab, U: Tokenizer<V>>:
     /// ```no_run
     /// # use std::path::PathBuf;
     /// # use tch::Device;
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// use rust_bert::pipelines::generation::{GPT2Generator, GenerateConfig, LanguageGenerator};
     /// # let mut home: PathBuf = dirs::home_dir().unwrap();
     /// # home.push("rustbert");

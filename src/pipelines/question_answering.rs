@@ -19,7 +19,7 @@
 //! ```no_run
 //! use rust_bert::pipelines::question_answering::{QaInput, QuestionAnsweringModel};
 //!
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! let qa_model = QuestionAnsweringModel::new(Default::default())?;
 //!
 //! let question = String::from("Where does Amy live ?");
@@ -45,7 +45,8 @@
 
 use crate::albert::AlbertForQuestionAnswering;
 use crate::bert::BertForQuestionAnswering;
-use crate::common::resources::{download_resource, RemoteResource, Resource};
+use crate::common::error::RustBertError;
+use crate::common::resources::{RemoteResource, Resource};
 use crate::distilbert::{
     DistilBertConfigResources, DistilBertForQuestionAnswering, DistilBertModelResources,
     DistilBertVocabResources,
@@ -190,6 +191,10 @@ pub struct QuestionAnsweringConfig {
     pub model_type: ModelType,
     /// Flag indicating if the model expects a lower casing of the input
     pub lower_case: bool,
+    /// Flag indicating if the tokenizer should strip accents (normalization). Only used for BERT / ALBERT models
+    pub strip_accents: Option<bool>,
+    /// Flag indicating if the tokenizer should add a white space before each tokenized input (needed for some Roberta models)
+    pub add_prefix_space: Option<bool>,
 }
 
 impl QuestionAnsweringConfig {
@@ -210,6 +215,8 @@ impl QuestionAnsweringConfig {
         vocab_resource: Resource,
         merges_resource: Option<Resource>,
         lower_case: bool,
+        strip_accents: impl Into<Option<bool>>,
+        add_prefix_space: impl Into<Option<bool>>,
     ) -> QuestionAnsweringConfig {
         QuestionAnsweringConfig {
             model_type,
@@ -218,6 +225,8 @@ impl QuestionAnsweringConfig {
             vocab_resource,
             merges_resource,
             lower_case,
+            strip_accents: strip_accents.into(),
+            add_prefix_space: add_prefix_space.into(),
             device: Device::cuda_if_available(),
         }
     }
@@ -239,6 +248,8 @@ impl Default for QuestionAnsweringConfig {
             device: Device::cuda_if_available(),
             model_type: ModelType::DistilBert,
             lower_case: false,
+            add_prefix_space: None,
+            strip_accents: None,
         }
     }
 }
@@ -317,6 +328,9 @@ impl QuestionAnsweringOption {
             ModelType::T5 => {
                 panic!("QuestionAnswering not implemented for T5!");
             }
+            ModelType::Bart => {
+                panic!("QuestionAnswering not implemented for BART!");
+            }
         }
     }
 
@@ -371,7 +385,7 @@ pub struct QuestionAnsweringModel {
     pub doc_stride: usize,
     pub max_query_length: usize,
     max_answer_len: usize,
-    distilbert_qa: QuestionAnsweringOption,
+    qa_model: QuestionAnsweringOption,
     var_store: VarStore,
 }
 
@@ -385,7 +399,7 @@ impl QuestionAnsweringModel {
     /// # Example
     ///
     /// ```no_run
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// use rust_bert::pipelines::question_answering::QuestionAnsweringModel;
     ///
     /// let qa_model = QuestionAnsweringModel::new(Default::default())?;
@@ -394,13 +408,13 @@ impl QuestionAnsweringModel {
     /// ```
     pub fn new(
         question_answering_config: QuestionAnsweringConfig,
-    ) -> failure::Fallible<QuestionAnsweringModel> {
-        let config_path = download_resource(&question_answering_config.config_resource)?;
-        let vocab_path = download_resource(&question_answering_config.vocab_resource)?;
-        let weights_path = download_resource(&question_answering_config.model_resource)?;
+    ) -> Result<QuestionAnsweringModel, RustBertError> {
+        let config_path = question_answering_config.config_resource.get_local_path()?;
+        let vocab_path = question_answering_config.vocab_resource.get_local_path()?;
+        let weights_path = question_answering_config.model_resource.get_local_path()?;
         let merges_path = if let Some(merges_resource) = &question_answering_config.merges_resource
         {
-            Some(download_resource(merges_resource).expect("Failure downloading resource"))
+            Some(merges_resource.get_local_path()?)
         } else {
             None
         };
@@ -409,9 +423,11 @@ impl QuestionAnsweringModel {
         let tokenizer = TokenizerOption::from_file(
             question_answering_config.model_type,
             vocab_path.to_str().unwrap(),
-            merges_path.map(|path| path.to_str().unwrap()),
+            merges_path.as_deref().map(|path| path.to_str().unwrap()),
             question_answering_config.lower_case,
-        );
+            question_answering_config.strip_accents,
+            question_answering_config.add_prefix_space,
+        )?;
         let pad_idx = tokenizer
             .get_pad_id()
             .expect("The Tokenizer used for Question Answering should contain a PAD id");
@@ -443,7 +459,7 @@ impl QuestionAnsweringModel {
             doc_stride: 128,
             max_query_length: 64,
             max_answer_len: 15,
-            distilbert_qa: qa_model,
+            qa_model,
             var_store,
         })
     }
@@ -462,7 +478,7 @@ impl QuestionAnsweringModel {
     /// # Example
     ///
     /// ```no_run
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// use rust_bert::pipelines::question_answering::{QaInput, QuestionAnsweringModel};
     ///
     /// let qa_model = QuestionAnsweringModel::new(Default::default())?;
@@ -529,12 +545,9 @@ impl QuestionAnsweringModel {
                 let attention_masks =
                     Tensor::stack(&attention_masks, 0).to(self.var_store.device());
 
-                let (start_logits, end_logits) = self.distilbert_qa.forward_t(
-                    Some(input_ids),
-                    Some(attention_masks),
-                    None,
-                    false,
-                );
+                let (start_logits, end_logits) =
+                    self.qa_model
+                        .forward_t(Some(input_ids), Some(attention_masks), None, false);
 
                 let start_logits = start_logits.detach();
                 let end_logits = end_logits.detach();

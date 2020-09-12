@@ -10,7 +10,7 @@
 //!
 //! ```no_run
 //! use rust_bert::pipelines::question_answering::{QaInput, QuestionAnsweringModel};
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! let qa_model = QuestionAnsweringModel::new(Default::default())?;
 //!
 //! let question = String::from("Where does Amy live ?");
@@ -46,7 +46,7 @@
 //! - English <-> Russian
 //! - French <-> German
 //! ```no_run
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! # use rust_bert::pipelines::generation::LanguageGenerator;
 //! use rust_bert::pipelines::translation::{Language, TranslationConfig, TranslationModel};
 //! use tch::Device;
@@ -73,7 +73,7 @@
 //! Include techniques such as beam search, top-k and nucleus sampling, temperature setting and repetition penalty.
 //!
 //! ```no_run
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! # use rust_bert::pipelines::generation::LanguageGenerator;
 //! use rust_bert::pipelines::summarization::SummarizationModel;
 //!
@@ -127,7 +127,7 @@
 //! The model uses a `ConversationManager` to keep track of active conversations and generate responses to them.
 //!
 //! ```no_run
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! use rust_bert::pipelines::conversation::{ConversationManager, ConversationModel};
 //! let conversation_model = ConversationModel::new(Default::default())?;
 //! let mut conversation_manager = ConversationManager::new();
@@ -153,7 +153,7 @@
 //!
 //! ```no_run
 //! use rust_bert::pipelines::generation::GPT2Generator;
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! # use rust_bert::pipelines::generation::LanguageGenerator;
 //! let mut model = GPT2Generator::new(Default::default())?;
 //! let input_context_1 = "The dog";
@@ -176,11 +176,90 @@
 //! # ;
 //! ```
 //!
-//! #### 6. Sentiment analysis
+//! #### 6. Zero-shot classification
+//! Performs zero-shot classification on input sentences with provided labels using a model fine-tuned for Natural Language Inference.
+//! ```no_run
+//! # use rust_bert::pipelines::zero_shot_classification::ZeroShotClassificationModel;
+//! # fn main() -> anyhow::Result<()> {
+//! let sequence_classification_model = ZeroShotClassificationModel::new(Default::default())?;
+//!  let input_sentence = "Who are you voting for in 2020?";
+//!  let input_sequence_2 = "The prime minister has announced a stimulus package which was widely criticized by the opposition.";
+//!  let candidate_labels = &["politics", "public health", "economics", "sports"];
+//!  let output = sequence_classification_model.predict_multilabel(
+//!      &[input_sentence, input_sequence_2],
+//!      candidate_labels,
+//!      None,
+//!      128,
+//!  );
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! outputs:
+//! ```no_run
+//! # use rust_bert::pipelines::sequence_classification::Label;
+//! let output = [
+//!     [
+//!         Label {
+//!             text: "politics".to_string(),
+//!             score: 0.972,
+//!             id: 0,
+//!             sentence: 0,
+//!         },
+//!         Label {
+//!             text: "public health".to_string(),
+//!             score: 0.032,
+//!             id: 1,
+//!             sentence: 0,
+//!         },
+//!         Label {
+//!             text: "economics".to_string(),
+//!             score: 0.006,
+//!             id: 2,
+//!             sentence: 0,
+//!         },
+//!         Label {
+//!             text: "sports".to_string(),
+//!             score: 0.004,
+//!             id: 3,
+//!             sentence: 0,
+//!         },
+//!     ],
+//!     [
+//!         Label {
+//!             text: "politics".to_string(),
+//!             score: 0.975,
+//!             id: 0,
+//!             sentence: 1,
+//!         },
+//!         Label {
+//!             text: "economics".to_string(),
+//!             score: 0.852,
+//!             id: 2,
+//!             sentence: 1,
+//!         },
+//!         Label {
+//!             text: "public health".to_string(),
+//!             score: 0.0818,
+//!             id: 1,
+//!             sentence: 1,
+//!         },
+//!         Label {
+//!             text: "sports".to_string(),
+//!             score: 0.001,
+//!             id: 3,
+//!             sentence: 1,
+//!         },
+//!     ],
+//! ]
+//! .to_vec();
+//! ```
+//!
+//! #### 7. Sentiment analysis
 //! Predicts the binary sentiment for a sentence. DistilBERT model finetuned on SST-2.
 //! ```no_run
 //! use rust_bert::pipelines::sentiment::SentimentModel;
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! let sentiment_model = SentimentModel::new(Default::default())?;
 //! let input = [
 //!     "Probably my all-time favorite movie, a story of selflessness, sacrifice and dedication to a noble cause, but it's not preachy or boring.",
@@ -215,12 +294,12 @@
 //! # ;
 //! ```
 //!
-//! #### 7. Named Entity Recognition
+//! #### 8. Named Entity Recognition
 //! Extracts entities (Person, Location, Organization, Miscellaneous) from text. The default NER mode is an English BERT cased large model finetuned on CoNNL03, contributed by the [MDZ Digital Library team at the Bavarian State Library](https://github.com/dbmdz)
 //! Additional pre-trained models are available for English, German, Spanish and Dutch.
 //! ```no_run
 //! use rust_bert::pipelines::ner::NERModel;
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! let ner_model = NERModel::new(Default::default())?;
 //! let input = [
 //!     "My name is Amy. I live in Paris.",
@@ -259,7 +338,6 @@
 //! ]
 //! # ;
 //! ```
-//!
 
 pub mod common;
 pub mod conversation;
@@ -271,3 +349,4 @@ pub mod sequence_classification;
 pub mod summarization;
 pub mod token_classification;
 pub mod translation;
+pub mod zero_shot_classification;

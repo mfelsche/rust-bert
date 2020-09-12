@@ -19,7 +19,7 @@
 //! ```no_run
 //! use rust_bert::pipelines::sentiment::SentimentModel;
 //!
-//! # fn main() -> failure::Fallible<()> {
+//! # fn main() -> anyhow::Result<()> {
 //! let sentiment_classifier = SentimentModel::new(Default::default())?;
 //! let input = [
 //!     "Probably my all-time favorite movie, a story of selflessness, sacrifice and dedication to a noble cause, but it's not preachy or boring.",
@@ -54,13 +54,10 @@
 //! # ;
 //! ```
 
+use crate::common::error::RustBertError;
 use crate::pipelines::sequence_classification::{
     SequenceClassificationConfig, SequenceClassificationModel,
 };
-use serde::Deserialize;
-use std::error::Error;
-use std::fs;
-use std::path::PathBuf;
 
 #[derive(Debug, PartialEq)]
 /// Enum with the possible sentiment polarities. Note that the pre-trained SST2 model does not include neutral sentiment.
@@ -95,14 +92,14 @@ impl SentimentModel {
     /// # Example
     ///
     /// ```no_run
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// use rust_bert::pipelines::sentiment::SentimentModel;
     ///
     /// let sentiment_model = SentimentModel::new(Default::default())?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(sentiment_config: SentimentConfig) -> failure::Fallible<SentimentModel> {
+    pub fn new(sentiment_config: SentimentConfig) -> Result<SentimentModel, RustBertError> {
         let sequence_classification_model = SequenceClassificationModel::new(sentiment_config)?;
         Ok(SentimentModel {
             sequence_classification_model,
@@ -121,7 +118,7 @@ impl SentimentModel {
     /// # Example
     ///
     /// ```no_run
-    /// # fn main() -> failure::Fallible<()> {
+    /// # fn main() -> anyhow::Result<()> {
     /// use rust_bert::pipelines::sentiment::SentimentModel;
     ///
     /// let sentiment_classifier =  SentimentModel::new(Default::default())?;
@@ -152,24 +149,4 @@ impl SentimentModel {
         }
         sentiments
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct Record {
-    sentence: String,
-    label: i8,
-}
-
-pub fn ss2_processor(file_path: PathBuf) -> Result<Vec<String>, Box<dyn Error>> {
-    let file = fs::File::open(file_path).expect("unable to open file");
-    let mut csv = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .delimiter(b'\t')
-        .from_reader(file);
-    let mut records = Vec::new();
-    for result in csv.deserialize() {
-        let record: Record = result?;
-        records.push(record.sentence);
-    }
-    Ok(records)
 }

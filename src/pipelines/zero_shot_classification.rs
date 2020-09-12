@@ -332,7 +332,7 @@ impl ZeroShotClassificationOption {
                         None,
                         train,
                     )
-                    .0
+                    .decoder_hidden_state
             }
             Self::Bert(ref model) => {
                 model
@@ -374,7 +374,7 @@ impl ZeroShotClassificationOption {
                         input_embeds,
                         train,
                     )
-                    .0
+                    .logits
             }
         }
     }

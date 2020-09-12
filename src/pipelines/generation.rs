@@ -1650,8 +1650,8 @@ pub mod private_generation_utils {
                         false,
                     )
                     .unwrap();
-                outputs = temp.0;
-                past = temp.2;
+                outputs = temp.lm_logits;
+                past = temp.cache;
 
                 let mut next_token_logits = outputs.select(1, -1);
                 //            Reduce probability for repeated inputs
@@ -1866,8 +1866,8 @@ pub mod private_generation_utils {
                         false,
                     )
                     .unwrap();
-                outputs = temp.0;
-                past = temp.2;
+                outputs = temp.lm_logits;
+                past = temp.cache;
                 forward_pass.push(t0.elapsed().as_millis());
                 let t0 = Instant::now();
                 let mut next_token_logits = outputs.select(1, -1);
@@ -2609,7 +2609,7 @@ pub trait LMHeadModel {
     /// let position_ids = Tensor::arange(sequence_length, (Int64, device))
     ///     .expand(&[batch_size, sequence_length], true);
     ///
-    /// let (output, encoder_output, past, hidden_states, attentions) = no_grad(|| {
+    /// let model_output = no_grad(|| {
     ///     gpt2_model
     ///         .forward_t(
     ///             &Some(input_tensor),
@@ -2636,14 +2636,13 @@ pub trait LMHeadModel {
         encoder_outputs: Option<&Tensor>,
         decoder_input_ids: &Option<Tensor>,
         train: bool,
-    ) -> Result<
-        (
-            Tensor,
-            Option<Tensor>,
-            Cache,
-            Option<Vec<Tensor>>,
-            Option<Vec<Tensor>>,
-        ),
-        &'static str,
-    >;
+    ) -> Result<LMModelOutput, &'static str>;
+}
+
+pub struct LMModelOutput {
+    pub lm_logits: Tensor,
+    pub encoder_hidden_state: Option<Tensor>,
+    pub cache: Cache,
+    pub all_hidden_states: Option<Vec<Tensor>>,
+    pub all_attentions: Option<Vec<Tensor>>,
 }

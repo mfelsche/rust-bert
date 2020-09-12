@@ -104,6 +104,13 @@ pub struct AlbertConfig {
 
 impl Config<AlbertConfig> for AlbertConfig {}
 
+pub struct AlbertOutput {
+    pub hidden_state: Tensor,
+    pub pooled_output: Tensor,
+    pub all_hidden_states: Option<Vec<Tensor>>,
+    pub all_attentions: Option<Vec<Vec<Tensor>>>,
+}
+
 /// # ALBERT Base model
 /// Base architecture for ALBERT models. Task-specific models will be built from this common base model
 /// It is made of the following blocks:
@@ -202,7 +209,7 @@ impl AlbertModel {
     /// let position_ids = Tensor::arange(sequence_length, (Int64, device))
     ///     .expand(&[batch_size, sequence_length], true);
     ///
-    /// let (output, pooled_output, all_hidden_states, all_attentions) = no_grad(|| {
+    /// let model_output = no_grad(|| {
     ///     albert_model
     ///         .forward_t(
     ///             Some(input_tensor),
@@ -223,15 +230,7 @@ impl AlbertModel {
         position_ids: Option<Tensor>,
         input_embeds: Option<Tensor>,
         train: bool,
-    ) -> Result<
-        (
-            Tensor,
-            Tensor,
-            Option<Vec<Tensor>>,
-            Option<Vec<Vec<Tensor>>>,
-        ),
-        &'static str,
-    > {
+    ) -> Result<AlbertOutput, &'static str> {
         let (input_shape, device) = match &input_ids {
             Some(input_value) => match &input_embeds {
                 Some(_) => {
@@ -269,19 +268,21 @@ impl AlbertModel {
             }
         };
 
-        let (hidden_state, all_hidden_states, all_attentions) =
+        let transformer_output =
             self.encoder
                 .forward_t(&embedding_output, Some(extended_attention_mask), train);
 
-        let pooled_output = self.pooler.forward(&hidden_state.select(1, 0));
+        let pooled_output = self
+            .pooler
+            .forward(&transformer_output.hidden_state.select(1, 0));
         let pooled_output = (self.pooler_activation)(&pooled_output);
 
-        Ok((
-            hidden_state,
+        Ok(AlbertOutput {
+            hidden_state: transformer_output.hidden_state,
             pooled_output,
-            all_hidden_states,
-            all_attentions,
-        ))
+            all_hidden_states: transformer_output.all_hidden_states,
+            all_attentions: transformer_output.all_attentions,
+        })
     }
 }
 
@@ -430,7 +431,7 @@ impl AlbertForMaskedLM {
     /// let position_ids = Tensor::arange(sequence_length, (Int64, device))
     ///     .expand(&[batch_size, sequence_length], true);
     ///
-    /// let (output, all_hidden_states, all_attentions) = no_grad(|| {
+    /// let masked_lm_output = no_grad(|| {
     ///     albert_model.forward_t(
     ///         Some(input_tensor),
     ///         Some(mask),
@@ -449,8 +450,8 @@ impl AlbertForMaskedLM {
         position_ids: Option<Tensor>,
         input_embeds: Option<Tensor>,
         train: bool,
-    ) -> (Tensor, Option<Vec<Tensor>>, Option<Vec<Vec<Tensor>>>) {
-        let (hidden_state, _, all_hidden_states, all_attentions) = self
+    ) -> AlbertMaskedLMOutput {
+        let base_model_output = self
             .albert
             .forward_t(
                 input_ids,
@@ -461,8 +462,12 @@ impl AlbertForMaskedLM {
                 train,
             )
             .unwrap();
-        let prediction_scores = self.predictions.forward(&hidden_state);
-        (prediction_scores, all_hidden_states, all_attentions)
+        let prediction_scores = self.predictions.forward(&base_model_output.hidden_state);
+        AlbertMaskedLMOutput {
+            prediction_scores,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
+        }
     }
 }
 
@@ -568,7 +573,7 @@ impl AlbertForSequenceClassification {
     ///  let token_type_ids = Tensor::zeros(&[batch_size, sequence_length], (Int64, device));
     ///  let position_ids = Tensor::arange(sequence_length, (Int64, device)).expand(&[batch_size, sequence_length], true);
     ///
-    ///  let (output, all_hidden_states, all_attentions) = no_grad(|| {
+    ///  let classification_output = no_grad(|| {
     ///    albert_model
     ///         .forward_t(Some(input_tensor),
     ///                    Some(mask),
@@ -586,8 +591,8 @@ impl AlbertForSequenceClassification {
         position_ids: Option<Tensor>,
         input_embeds: Option<Tensor>,
         train: bool,
-    ) -> (Tensor, Option<Vec<Tensor>>, Option<Vec<Vec<Tensor>>>) {
-        let (_, pooled_output, all_hidden_states, all_attentions) = self
+    ) -> AlbertSequenceClassificationOutput {
+        let base_model_output = self
             .albert
             .forward_t(
                 input_ids,
@@ -598,10 +603,15 @@ impl AlbertForSequenceClassification {
                 train,
             )
             .unwrap();
-        let logits = pooled_output
+        let logits = base_model_output
+            .pooled_output
             .apply_t(&self.dropout, train)
             .apply(&self.classifier);
-        (logits, all_hidden_states, all_attentions)
+        AlbertSequenceClassificationOutput {
+            logits,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
+        }
     }
 }
 
@@ -704,7 +714,7 @@ impl AlbertForTokenClassification {
     ///  let token_type_ids = Tensor::zeros(&[batch_size, sequence_length], (Int64, device));
     ///  let position_ids = Tensor::arange(sequence_length, (Int64, device)).expand(&[batch_size, sequence_length], true);
     ///
-    ///  let (output, all_hidden_states, all_attentions) = no_grad(|| {
+    ///  let model_output = no_grad(|| {
     ///    albert_model
     ///         .forward_t(Some(input_tensor),
     ///                    Some(mask),
@@ -722,8 +732,8 @@ impl AlbertForTokenClassification {
         position_ids: Option<Tensor>,
         input_embeds: Option<Tensor>,
         train: bool,
-    ) -> (Tensor, Option<Vec<Tensor>>, Option<Vec<Vec<Tensor>>>) {
-        let (sequence_output, _, all_hidden_states, all_attentions) = self
+    ) -> AlbertTokenClassificationOutput {
+        let base_model_output = self
             .albert
             .forward_t(
                 input_ids,
@@ -734,10 +744,15 @@ impl AlbertForTokenClassification {
                 train,
             )
             .unwrap();
-        let logits = sequence_output
+        let logits = base_model_output
+            .hidden_state
             .apply_t(&self.dropout, train)
             .apply(&self.classifier);
-        (logits, all_hidden_states, all_attentions)
+        AlbertTokenClassificationOutput {
+            logits,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
+        }
     }
 }
 
@@ -830,7 +845,7 @@ impl AlbertForQuestionAnswering {
     ///  let token_type_ids = Tensor::zeros(&[batch_size, sequence_length], (Int64, device));
     ///  let position_ids = Tensor::arange(sequence_length, (Int64, device)).expand(&[batch_size, sequence_length], true);
     ///
-    ///  let (start_logits, end_logits, all_hidden_states, all_attentions) = no_grad(|| {
+    ///  let model_output = no_grad(|| {
     ///    albert_model
     ///         .forward_t(Some(input_tensor),
     ///                    Some(mask),
@@ -848,13 +863,8 @@ impl AlbertForQuestionAnswering {
         position_ids: Option<Tensor>,
         input_embeds: Option<Tensor>,
         train: bool,
-    ) -> (
-        Tensor,
-        Tensor,
-        Option<Vec<Tensor>>,
-        Option<Vec<Vec<Tensor>>>,
-    ) {
-        let (sequence_output, _, all_hidden_states, all_attentions) = self
+    ) -> AlbertQuestionAnsweringOutput {
+        let base_model_output = self
             .albert
             .forward_t(
                 input_ids,
@@ -865,12 +875,20 @@ impl AlbertForQuestionAnswering {
                 train,
             )
             .unwrap();
-        let logits = sequence_output.apply(&self.qa_outputs).split(1, -1);
+        let logits = base_model_output
+            .hidden_state
+            .apply(&self.qa_outputs)
+            .split(1, -1);
         let (start_logits, end_logits) = (&logits[0], &logits[1]);
         let start_logits = start_logits.squeeze1(-1);
         let end_logits = end_logits.squeeze1(-1);
 
-        (start_logits, end_logits, all_hidden_states, all_attentions)
+        AlbertQuestionAnsweringOutput {
+            start_logits,
+            end_logits,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
+        }
     }
 }
 
@@ -969,7 +987,7 @@ impl AlbertForMultipleChoice {
     ///  let token_type_ids = Tensor::zeros(&[batch_size, sequence_length], (Int64, device));
     ///  let position_ids = Tensor::arange(sequence_length, (Int64, device)).expand(&[batch_size, sequence_length], true);
     ///
-    ///  let (output, all_hidden_states, all_attentions) = no_grad(|| {
+    ///  let model_output = no_grad(|| {
     ///    albert_model
     ///         .forward_t(Some(input_tensor),
     ///                    Some(mask),
@@ -987,7 +1005,7 @@ impl AlbertForMultipleChoice {
         position_ids: Option<Tensor>,
         input_embeds: Option<Tensor>,
         train: bool,
-    ) -> Result<(Tensor, Option<Vec<Tensor>>, Option<Vec<Vec<Tensor>>>), &'static str> {
+    ) -> Result<AlbertSequenceClassificationOutput, &'static str> {
         let (input_ids, input_embeds, num_choices) = match &input_ids {
             Some(input_value) => match &input_embeds {
                 Some(_) => {
@@ -1024,7 +1042,7 @@ impl AlbertForMultipleChoice {
             None => None,
         };
 
-        let (_, pooled_output, all_hidden_states, all_attentions) = self
+        let base_model_output = self
             .albert
             .forward_t(
                 input_ids,
@@ -1035,11 +1053,41 @@ impl AlbertForMultipleChoice {
                 train,
             )
             .unwrap();
-        let logits = pooled_output
+        let logits = base_model_output
+            .pooled_output
             .apply_t(&self.dropout, train)
             .apply(&self.classifier)
             .view((-1, num_choices));
 
-        Ok((logits, all_hidden_states, all_attentions))
+        Ok(AlbertSequenceClassificationOutput {
+            logits,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
+        })
     }
+}
+
+pub struct AlbertMaskedLMOutput {
+    pub prediction_scores: Tensor,
+    pub all_hidden_states: Option<Vec<Tensor>>,
+    pub all_attentions: Option<Vec<Vec<Tensor>>>,
+}
+
+pub struct AlbertSequenceClassificationOutput {
+    pub logits: Tensor,
+    pub all_hidden_states: Option<Vec<Tensor>>,
+    pub all_attentions: Option<Vec<Vec<Tensor>>>,
+}
+
+pub struct AlbertTokenClassificationOutput {
+    pub logits: Tensor,
+    pub all_hidden_states: Option<Vec<Tensor>>,
+    pub all_attentions: Option<Vec<Vec<Tensor>>>,
+}
+
+pub struct AlbertQuestionAnsweringOutput {
+    pub start_logits: Tensor,
+    pub end_logits: Tensor,
+    pub all_hidden_states: Option<Vec<Tensor>>,
+    pub all_attentions: Option<Vec<Vec<Tensor>>>,
 }

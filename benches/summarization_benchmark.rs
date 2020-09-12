@@ -25,7 +25,7 @@ fn summarization_forward_pass(iters: u64, model: &SummarizationModel, data: &[&s
     duration
 }
 
-fn sumamrization_load_model(iters: u64) -> Duration {
+fn summarization_load_model(iters: u64) -> Duration {
     let mut duration = Duration::new(0, 0);
     for _i in 0..iters {
         let start = Instant::now();
@@ -74,7 +74,7 @@ about exoplanets like K2-18b."];
     });
 
     c.bench_function("Load model", |b| {
-        b.iter_custom(|iters| black_box(sumamrization_load_model(iters)))
+        b.iter_custom(|iters| black_box(summarization_load_model(iters)))
     });
 }
 

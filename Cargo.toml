@@ -65,12 +65,10 @@ cached-path = "0.4.3"
 lazy_static = "1.4.0"
 uuid = {version="0.8.1", features =["v4"]}
 tokio = { version = "0.2.22", features = ["full"] }
+thiserror = "1.0.20"
 
 [dev-dependencies]
 criterion = "0.3.3"
 uuid = { version = "0.8.1", features = ["v4"] }
-thiserror = "1.0.20"
-
-[dev-dependencies]
 anyhow = "1.0.32"
 csv = "1.1.3"

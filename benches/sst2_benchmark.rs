@@ -2,11 +2,13 @@
 extern crate criterion;
 
 use criterion::Criterion;
-use rust_bert::pipelines::sentiment::{ss2_processor, SentimentModel};
+use rust_bert::pipelines::sentiment::SentimentModel;
 use rust_bert::pipelines::sequence_classification::SequenceClassificationConfig;
-use std::env;
+use serde::Deserialize;
+use std::error::Error;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use std::{env, fs};
 use tch::Device;
 use torch_sys::dummy_cuda_dependency;
 
@@ -42,6 +44,26 @@ fn sst2_forward_pass(iters: u64, model: &SentimentModel, sst2_data: &Vec<String>
     duration
 }
 
+#[derive(Debug, Deserialize)]
+struct Record {
+    sentence: String,
+    label: i8,
+}
+
+fn ss2_processor(file_path: PathBuf) -> Result<Vec<String>, Box<dyn Error>> {
+    let file = fs::File::open(file_path).expect("unable to open file");
+    let mut csv = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .delimiter(b'\t')
+        .from_reader(file);
+    let mut records = Vec::new();
+    for result in csv.deserialize() {
+        let record: Record = result?;
+        records.push(record.sentence);
+    }
+    Ok(records)
+}
+
 fn sst2_load_model(iters: u64) -> Duration {
     let mut duration = Duration::new(0, 0);
     for _i in 0..iters {
@@ -67,7 +89,7 @@ fn bench_sst2(c: &mut Criterion) {
         .expect("Please set the \"squad_dataset\" environment variable pointing to the SQuAD dataset folder"));
     sst2_path.push("train.tsv");
     let mut inputs = ss2_processor(sst2_path).unwrap();
-    inputs.truncate(5000);
+    inputs.truncate(2000);
 
     c.bench_function("SST2 forward pass", |b| {
         b.iter_custom(|iters| sst2_forward_pass(iters, &model, &inputs))

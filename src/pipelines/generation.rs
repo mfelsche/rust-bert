@@ -327,7 +327,7 @@ impl OpenAIGenerator {
 }
 
 impl PrivateLanguageGenerator<OpenAIGPTLMHeadModel, OpenAiGptVocab, OpenAiGptTokenizer>
-for OpenAIGenerator
+    for OpenAIGenerator
 {
     fn get_model(&self) -> &OpenAIGPTLMHeadModel {
         &self.model
@@ -362,8 +362,9 @@ for OpenAIGenerator
 }
 
 impl LanguageGenerator<OpenAIGPTLMHeadModel, OpenAiGptVocab, OpenAiGptTokenizer>
-for OpenAIGenerator
-{}
+    for OpenAIGenerator
+{
+}
 
 /// # Language generation model based on the GPT2 architecture
 pub struct GPT2Generator {
@@ -664,7 +665,7 @@ impl BartGenerator {
 }
 
 impl PrivateLanguageGenerator<BartForConditionalGeneration, RobertaVocab, RobertaTokenizer>
-for BartGenerator
+    for BartGenerator
 {
     fn get_model(&self) -> &BartForConditionalGeneration {
         &self.model
@@ -826,8 +827,9 @@ for BartGenerator
 }
 
 impl LanguageGenerator<BartForConditionalGeneration, RobertaVocab, RobertaTokenizer>
-for BartGenerator
-{}
+    for BartGenerator
+{
+}
 
 /// # Language generation model based on the Marian architecture for machine translation
 pub struct MarianGenerator {
@@ -933,7 +935,7 @@ impl MarianGenerator {
 }
 
 impl PrivateLanguageGenerator<MarianForConditionalGeneration, MarianVocab, MarianTokenizer>
-for MarianGenerator
+    for MarianGenerator
 {
     fn get_model(&self) -> &MarianForConditionalGeneration {
         &self.model
@@ -1100,8 +1102,9 @@ for MarianGenerator
 }
 
 impl LanguageGenerator<MarianForConditionalGeneration, MarianVocab, MarianTokenizer>
-for MarianGenerator
-{}
+    for MarianGenerator
+{
+}
 
 pub struct T5Generator {
     model: T5ForConditionalGeneration,
@@ -1386,7 +1389,8 @@ pub mod private_generation_utils {
             _scores: &mut Tensor,
             _current_length: i64,
             _max_length: i64,
-        ) {}
+        ) {
+        }
 
         fn encode(&self, _input_ids: &Tensor, _attention_mask: Option<&Tensor>) -> Option<Tensor> {
             None
@@ -1448,8 +1452,8 @@ pub mod private_generation_utils {
                         &TruncationStrategy::LongestFirst,
                         0,
                     )
-                        .unwrap()
-                        .0
+                    .unwrap()
+                    .0
                 })
                 .collect::<Vec<Vec<i64>>>();
 
@@ -1676,7 +1680,7 @@ pub mod private_generation_utils {
                         current_length as i64,
                     );
                     for (batch_index, index_banned_token) in
-                    (0..banned_tokens.len() as i64).zip(banned_tokens)
+                        (0..banned_tokens.len() as i64).zip(banned_tokens)
                     {
                         let _ = next_token_logits.get(batch_index).index_fill_(
                             0,
@@ -1748,7 +1752,7 @@ pub mod private_generation_utils {
                                 &[*attention_mask.size().first().unwrap(), 1],
                                 (Int64, attention_mask.device()),
                             )
-                                .as_ref(),
+                            .as_ref(),
                         ],
                         -1,
                     );
@@ -1874,16 +1878,15 @@ pub mod private_generation_utils {
                 forward_pass.push(t0.elapsed().as_millis());
                 let t0 = Instant::now();
                 let mut next_token_logits = outputs.select(1, -1);
-                if self.is_encoder_decoder() & !do_sample {
+                if self.is_encoder_decoder() & !gen_opt.do_sample {
                     self.prepare_scores_for_generation(
                         &mut next_token_logits,
                         current_length,
-                        max_length,
+                        gen_opt.max_length,
                     );
                 }
                 adjust_logits.push(t0.elapsed().as_millis());
                 let t0 = Instant::now();
-                let mut scores = next_token_logits.log_softmax(-1, Float);
                 //            Reduce probability for repeated inputs
                 if gen_opt.repetition_penalty > 1f64 {
                     self.enforce_repetition_penalty(
@@ -1923,7 +1926,7 @@ pub mod private_generation_utils {
                         current_length,
                     );
                     for (batch_index, index_banned_token) in
-                    (0..banned_tokens.len() as i64).zip(banned_tokens)
+                        (0..banned_tokens.len() as i64).zip(banned_tokens)
                     {
                         let _ = scores.get(batch_index).index_fill_(
                             0,
@@ -2047,21 +2050,21 @@ pub mod private_generation_utils {
                         .map(|(score, _, _)| *score)
                         .collect_vec(),
                 )
-                    .to(input_ids.device());
+                .to(input_ids.device());
                 beam_tokens = Tensor::of_slice(
                     &next_batch_beam
                         .iter()
                         .map(|(_, token, _)| *token)
                         .collect_vec(),
                 )
-                    .to(input_ids.device());
+                .to(input_ids.device());
                 beam_indices = Tensor::of_slice(
                     &next_batch_beam
                         .iter()
                         .map(|(_, _, index)| *index)
                         .collect_vec(),
                 )
-                    .to(input_ids.device());
+                .to(input_ids.device());
 
                 input_ids = input_ids.index_select(0, &beam_indices);
                 input_ids = Tensor::cat(&[input_ids, beam_tokens.unsqueeze(1)], -1);
@@ -2075,7 +2078,7 @@ pub mod private_generation_utils {
                                 &[*attention_mask.size().first().unwrap(), 1],
                                 (Int64, attention_mask.device()),
                             )
-                                .as_ref(),
+                            .as_ref(),
                         ],
                         -1,
                     );
@@ -2211,7 +2214,7 @@ pub mod private_generation_utils {
 /// # Common trait for text generation models.
 /// Main API for text generation
 pub trait LanguageGenerator<T: LMHeadModel, V: Vocab, U: Tokenizer<V>>:
-PrivateLanguageGenerator<T, V, U>
+    PrivateLanguageGenerator<T, V, U>
 {
     /// Generate text based on a vector of promp texts.
     ///
@@ -2314,7 +2317,6 @@ PrivateLanguageGenerator<T, V, U>
         input_ids: Tensor,
         attention_mask: Option<Tensor>,
     ) -> Vec<Vec<i64>> {
-        let t0 = Instant::now();
         let eos_token_ids = PrivateLanguageGenerator::get_eos_ids(self).clone();
 
         let config = PrivateLanguageGenerator::get_config(self);

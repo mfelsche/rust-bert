@@ -11,7 +11,7 @@ use tch::Device;
 use torch_sys::dummy_cuda_dependency;
 
 fn create_translation_model() -> TranslationModel {
-    let config = TranslationConfig::new(Language::EnglishToFrench, Device::cuda_if_available());
+    let config = TranslationConfig::new(Language::EnglishToFrenchV2, Device::cuda_if_available());
     TranslationModel::new(config).unwrap()
 }
 
@@ -56,7 +56,8 @@ fn summarization_load_model(iters: u64) -> Duration {
     let mut duration = Duration::new(0, 0);
     for _i in 0..iters {
         let start = Instant::now();
-        let config = TranslationConfig::new(Language::EnglishToFrench, Device::cuda_if_available());
+        let config =
+            TranslationConfig::new(Language::EnglishToFrenchV2, Device::cuda_if_available());
         TranslationModel::new(config).unwrap();
         duration = duration.checked_add(start.elapsed()).unwrap();
     }

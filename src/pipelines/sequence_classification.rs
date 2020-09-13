@@ -313,13 +313,13 @@ impl SequenceClassificationOption {
                         input_embeds,
                         train,
                     )
-                    .0
+                    .logits
             }
             Self::DistilBert(ref model) => {
                 model
                     .forward_t(input_ids, mask, input_embeds, train)
                     .expect("Error in distilbert forward_t")
-                    .0
+                    .logits
             }
             Self::Roberta(ref model) | Self::XLMRoberta(ref model) => {
                 model
@@ -569,7 +569,7 @@ impl SequenceClassificationModel {
             };
             sequence_labels.push(label);
         }
-        if sequence_labels.len() > 0 {
+        if !sequence_labels.is_empty() {
             labels.push(sequence_labels);
         }
         Ok(labels)

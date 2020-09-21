@@ -13,10 +13,10 @@
 
 use crate::bert::embeddings::{BertEmbedding, BertEmbeddings};
 use crate::bert::encoder::{BertEncoder, BertPooler};
-use crate::common::activations::{_gelu, _mish, _relu};
+use crate::common::activations::Activation;
 use crate::common::dropout::Dropout;
 use crate::common::linear::{linear_no_bias, LinearNoBias};
-use crate::Config;
+use crate::{Config, RustBertError};
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -85,18 +85,6 @@ impl BertVocabResources {
         "bert-qa/vocab",
         "https://cdn.huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad-vocab.txt",
     );
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-/// # Activation function used in the attention layer and masked language model head
-pub enum Activation {
-    /// Gaussian Error Linear Unit ([Hendrycks et al., 2016,](https://arxiv.org/abs/1606.08415))
-    gelu,
-    /// Rectified Linear Unit
-    relu,
-    /// Mish ([Misra, 2019](https://arxiv.org/abs/1908.08681))
-    mish,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -199,10 +187,11 @@ impl<T: BertEmbedding> BertModel<T> {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `pooled_output` - `Tensor` of shape (*batch size*, *hidden_size*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `BertOutput` containing:
+    ///   - `hidden_state` - `Tensor` of shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `pooled_output` - `Tensor` of shape (*batch size*, *hidden_size*)
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -249,18 +238,22 @@ impl<T: BertEmbedding> BertModel<T> {
         encoder_hidden_states: &Option<Tensor>,
         encoder_mask: &Option<Tensor>,
         train: bool,
-    ) -> Result<BertModelOutput, &'static str> {
+    ) -> Result<BertModelOutput, RustBertError> {
         let (input_shape, device) = match &input_ids {
             Some(input_value) => match &input_embeds {
                 Some(_) => {
-                    return Err("Only one of input ids or input embeddings may be set");
+                    return Err(RustBertError::ValueError(
+                        "Only one of input ids or input embeddings may be set".into(),
+                    ));
                 }
                 None => (input_value.size(), input_value.device()),
             },
             None => match &input_embeds {
                 Some(embeds) => (vec![embeds.size()[0], embeds.size()[1]], embeds.device()),
                 None => {
-                    return Err("At least one of input ids or input embeddings must be set");
+                    return Err(RustBertError::ValueError(
+                        "At least one of input ids or input embeddings must be set".into(),
+                    ));
                 }
             },
         };
@@ -287,7 +280,9 @@ impl<T: BertEmbedding> BertModel<T> {
                 }
             }
             _ => {
-                return Err("Invalid attention mask dimension, must be 2 or 3");
+                return Err(RustBertError::ValueError(
+                    "Invalid attention mask dimension, must be 2 or 3".into(),
+                ));
             }
         };
 
@@ -312,7 +307,9 @@ impl<T: BertEmbedding> BertModel<T> {
                     2 => Some(encoder_mask.unsqueeze(1).unsqueeze(1)),
                     3 => Some(encoder_mask.unsqueeze(1)),
                     _ => {
-                        return Err("Invalid encoder attention mask dimension, must be 2 or 3");
+                        return Err(RustBertError::ValueError(
+                            "Invalid attention mask dimension, must be 2 or 3".into(),
+                        ));
                     }
                 }
             } else {
@@ -370,11 +367,7 @@ impl BertPredictionHeadTransform {
             config.hidden_size,
             Default::default(),
         );
-        let activation = Box::new(match &config.hidden_act {
-            Activation::gelu => _gelu,
-            Activation::relu => _relu,
-            Activation::mish => _mish,
-        });
+        let activation = config.hidden_act.get_function();
         let layer_norm_config = nn::LayerNormConfig {
             eps: 1e-12,
             ..Default::default()
@@ -486,9 +479,10 @@ impl BertForMaskedLM {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *num_labels*, *vocab_size*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `BertMaskedLMOutput` containing:
+    ///   - `prediction_scores` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*)
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -534,7 +528,7 @@ impl BertForMaskedLM {
         encoder_mask: &Option<Tensor>,
         train: bool,
     ) -> BertMaskedLMOutput {
-        let model_output = self
+        let base_model_output = self
             .bert
             .forward_t(
                 input_ids,
@@ -548,11 +542,11 @@ impl BertForMaskedLM {
             )
             .unwrap();
 
-        let prediction_scores = self.cls.forward(&model_output.hidden_state);
+        let prediction_scores = self.cls.forward(&base_model_output.hidden_state);
         BertMaskedLMOutput {
             prediction_scores,
-            all_hidden_states: model_output.all_hidden_states,
-            all_attentions: model_output.all_attentions,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
         }
     }
 }
@@ -630,9 +624,10 @@ impl BertForSequenceClassification {
     ///
     /// # Returns
     ///
-    /// * `labels` - `Tensor` of shape (*batch size*, *num_labels*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `BertSequenceClassificationOutput` containing:
+    ///   - `logits` - `Tensor` of shape (*batch size*, *num_labels*)
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -674,7 +669,7 @@ impl BertForSequenceClassification {
         input_embeds: Option<Tensor>,
         train: bool,
     ) -> BertSequenceClassificationOutput {
-        let model_output = self
+        let base_model_output = self
             .bert
             .forward_t(
                 input_ids,
@@ -688,14 +683,14 @@ impl BertForSequenceClassification {
             )
             .unwrap();
 
-        let logits = model_output
+        let logits = base_model_output
             .pooled_output
             .apply_t(&self.dropout, train)
             .apply(&self.classifier);
         BertSequenceClassificationOutput {
             logits,
-            all_hidden_states: model_output.all_hidden_states,
-            all_attentions: model_output.all_attentions,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
         }
     }
 }
@@ -764,9 +759,10 @@ impl BertForMultipleChoice {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*1*, *batch size*) containing the logits for each of the alternatives given
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `BertSequenceClassificationOutput` containing:
+    ///   - `logits` - `Tensor` of shape (*1*, *batch size*) containing the logits for each of the alternatives given
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -822,7 +818,7 @@ impl BertForMultipleChoice {
             None => None,
         };
 
-        let model_output = self
+        let base_model_output = self
             .bert
             .forward_t(
                 Some(input_ids),
@@ -836,15 +832,15 @@ impl BertForMultipleChoice {
             )
             .unwrap();
 
-        let logits = model_output
+        let logits = base_model_output
             .pooled_output
             .apply_t(&self.dropout, train)
             .apply(&self.classifier)
             .view((-1, num_choices));
         BertSequenceClassificationOutput {
             logits,
-            all_hidden_states: model_output.all_hidden_states,
-            all_attentions: model_output.all_attentions,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
         }
     }
 }
@@ -923,9 +919,10 @@ impl BertForTokenClassification {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *num_labels*) containing the logits for each of the input tokens and classes
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `BertTokenClassificationOutput` containing:
+    ///   - `logits` - `Tensor` of shape (*batch size*, *sequence_length*, *num_labels*) containing the logits for each of the input tokens and classes
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -967,7 +964,7 @@ impl BertForTokenClassification {
         input_embeds: Option<Tensor>,
         train: bool,
     ) -> BertTokenClassificationOutput {
-        let model_output = self
+        let base_model_output = self
             .bert
             .forward_t(
                 input_ids,
@@ -981,14 +978,14 @@ impl BertForTokenClassification {
             )
             .unwrap();
 
-        let logits = model_output
+        let logits = base_model_output
             .hidden_state
             .apply_t(&self.dropout, train)
             .apply(&self.classifier);
         BertTokenClassificationOutput {
             logits,
-            all_hidden_states: model_output.all_hidden_states,
-            all_attentions: model_output.all_attentions,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
         }
     }
 }
@@ -1058,10 +1055,11 @@ impl BertForQuestionAnswering {
     ///
     /// # Returns
     ///
-    /// * `start_scores` - `Tensor` of shape (*batch size*, *sequence_length*) containing the logits for start of the answer
-    /// * `end_scores` - `Tensor` of shape (*batch size*, *sequence_length*) containing the logits for end of the answer
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `BertQuestionAnsweringOutput` containing:
+    ///   - `start_logits` - `Tensor` of shape (*batch size*, *sequence_length*) containing the logits for start of the answer
+    ///   - `end_logits` - `Tensor` of shape (*batch size*, *sequence_length*) containing the logits for end of the answer
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -1103,7 +1101,7 @@ impl BertForQuestionAnswering {
         input_embeds: Option<Tensor>,
         train: bool,
     ) -> BertQuestionAnsweringOutput {
-        let model_output = self
+        let base_model_output = self
             .bert
             .forward_t(
                 input_ids,
@@ -1117,7 +1115,7 @@ impl BertForQuestionAnswering {
             )
             .unwrap();
 
-        let sequence_output = model_output.hidden_state.apply(&self.qa_outputs);
+        let sequence_output = base_model_output.hidden_state.apply(&self.qa_outputs);
         let logits = sequence_output.split(1, -1);
         let (start_logits, end_logits) = (&logits[0], &logits[1]);
         let start_logits = start_logits.squeeze1(-1);
@@ -1126,40 +1124,62 @@ impl BertForQuestionAnswering {
         BertQuestionAnsweringOutput {
             start_logits,
             end_logits,
-            all_hidden_states: model_output.all_hidden_states,
-            all_attentions: model_output.all_attentions,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
         }
     }
 }
 
+/// Container for the BERT model output.
 pub struct BertModelOutput {
+    /// Last hidden states from the model
     pub hidden_state: Tensor,
+    /// Pooled output (hidden state for the first token)
     pub pooled_output: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }
 
+/// Container for the BERT masked LM model output.
 pub struct BertMaskedLMOutput {
+    /// Logits for the vocabulary items at each sequence position
     pub prediction_scores: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }
 
+/// Container for the BERT sequence classification model output.
 pub struct BertSequenceClassificationOutput {
+    /// Logits for each input (sequence) for each target class
     pub logits: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }
 
+/// Container for the BERT token classification model output.
 pub struct BertTokenClassificationOutput {
+    /// Logits for each sequence item (token) for each target class
     pub logits: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }
 
+/// Container for the BERT question answering model output.
 pub struct BertQuestionAnsweringOutput {
+    /// Logits for the start position for token of each input sequence
     pub start_logits: Tensor,
+    /// Logits for the end position for token of each input sequence
     pub end_logits: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }

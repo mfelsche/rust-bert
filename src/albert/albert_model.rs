@@ -13,9 +13,9 @@
 
 use crate::albert::embeddings::AlbertEmbeddings;
 use crate::albert::encoder::AlbertTransformer;
-use crate::common::activations::{_gelu, _gelu_new, _mish, _relu, _tanh};
+use crate::common::activations::{Activation, _tanh};
 use crate::common::dropout::Dropout;
-use crate::Config;
+use crate::{Config, RustBertError};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Borrow, collections::HashMap};
 use tch::nn::Module;
@@ -54,20 +54,6 @@ impl AlbertVocabResources {
     );
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-/// # Activation function used in the attention layer and masked language model head
-pub enum Activation {
-    /// Gaussian Error Linear Unit ([Hendrycks et al., 2016,](https://arxiv.org/abs/1606.08415))
-    gelu_new,
-    /// Gaussian Error Linear Unit ([Hendrycks et al., 2016,](https://arxiv.org/abs/1606.08415))
-    gelu,
-    /// Rectified Linear Unit
-    relu,
-    /// Mish ([Misra, 2019](https://arxiv.org/abs/1908.08681))
-    mish,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 /// # ALBERT model configuration
 /// Defines the ALBERT model architecture (e.g. number of layers, hidden layer size, label mapping...)
@@ -103,13 +89,6 @@ pub struct AlbertConfig {
 }
 
 impl Config<AlbertConfig> for AlbertConfig {}
-
-pub struct AlbertOutput {
-    pub hidden_state: Tensor,
-    pub pooled_output: Tensor,
-    pub all_hidden_states: Option<Vec<Tensor>>,
-    pub all_attentions: Option<Vec<Vec<Tensor>>>,
-}
 
 /// # ALBERT Base model
 /// Base architecture for ALBERT models. Task-specific models will be built from this common base model
@@ -183,11 +162,11 @@ impl AlbertModel {
     /// * `train` - boolean flag to turn on/off the dropout layers in the model. Should be set to false for inference.
     ///
     /// # Returns
-    ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `pooled_output` - `Tensor` of shape (*batch size*, *hidden_size*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `AlbertOutput` containing:
+    ///   - `hidden_state` - `Tensor` of shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `pooled_output` - `Tensor` of shape (*batch size*, *hidden_size*)
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -230,18 +209,22 @@ impl AlbertModel {
         position_ids: Option<Tensor>,
         input_embeds: Option<Tensor>,
         train: bool,
-    ) -> Result<AlbertOutput, &'static str> {
+    ) -> Result<AlbertOutput, RustBertError> {
         let (input_shape, device) = match &input_ids {
             Some(input_value) => match &input_embeds {
                 Some(_) => {
-                    return Err("Only one of input ids or input embeddings may be set");
+                    return Err(RustBertError::ValueError(
+                        "Only one of input ids or input embeddings may be set".into(),
+                    ));
                 }
                 None => (input_value.size(), input_value.device()),
             },
             None => match &input_embeds {
                 Some(embeds) => (vec![embeds.size()[0], embeds.size()[1]], embeds.device()),
                 None => {
-                    return Err("At least one of input ids or input embeddings must be set");
+                    return Err(RustBertError::ValueError(
+                        "At least one of input ids or input embeddings must be set".into(),
+                    ));
                 }
             },
         };
@@ -326,12 +309,7 @@ impl AlbertMLMHead {
             Default::default(),
         );
 
-        let activation = Box::new(match &config.hidden_act {
-            Activation::gelu_new => _gelu_new,
-            Activation::gelu => _gelu,
-            Activation::relu => _relu,
-            Activation::mish => _mish,
-        });
+        let activation = config.hidden_act.get_function();
 
         AlbertMLMHead {
             layer_norm,
@@ -407,9 +385,10 @@ impl AlbertForMaskedLM {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `AlbertMaskedLMOutput` containing:
+    ///   - `prediction_scores` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*)
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -550,9 +529,10 @@ impl AlbertForSequenceClassification {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *num_labels*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `AlbertSequenceClassificationOutput` containing:
+    ///   - `logits` - `Tensor` of shape (*batch size*, *num_labels*)
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -691,9 +671,10 @@ impl AlbertForTokenClassification {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *num_labels*) containing the logits for each of the input tokens and classes
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `AlbertTokenClassificationOutput` containing:
+    ///   - `logits` - `Tensor` of shape (*batch size*, *sequence_length*, *num_labels*) containing the logits for each of the input tokens and classes
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -821,10 +802,11 @@ impl AlbertForQuestionAnswering {
     ///
     /// # Returns
     ///
-    /// * `start_scores` - `Tensor` of shape (*batch size*, *sequence_length*) containing the logits for start of the answer
-    /// * `end_scores` - `Tensor` of shape (*batch size*, *sequence_length*) containing the logits for end of the answer
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `AlbertQuestionAnsweringOutput` containing:
+    ///   - `start_logits` - `Tensor` of shape (*batch size*, *sequence_length*) containing the logits for start of the answer
+    ///   - `end_logits` - `Tensor` of shape (*batch size*, *sequence_length*) containing the logits for end of the answer
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -964,9 +946,10 @@ impl AlbertForMultipleChoice {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*1*, *batch size*) containing the logits for each of the alternatives given
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `AlbertSequenceClassificationOutput` containing:
+    ///   - `logits` - `Tensor` of shape (*1*, *batch size*) containing the logits for each of the alternatives given
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Vec<Tensor>>>` of length *num_hidden_layers* of nested length *inner_group_num* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -1005,11 +988,13 @@ impl AlbertForMultipleChoice {
         position_ids: Option<Tensor>,
         input_embeds: Option<Tensor>,
         train: bool,
-    ) -> Result<AlbertSequenceClassificationOutput, &'static str> {
+    ) -> Result<AlbertSequenceClassificationOutput, RustBertError> {
         let (input_ids, input_embeds, num_choices) = match &input_ids {
             Some(input_value) => match &input_embeds {
                 Some(_) => {
-                    return Err("Only one of input ids or input embeddings may be set");
+                    return Err(RustBertError::ValueError(
+                        "Only one of input ids or input embeddings may be set".into(),
+                    ));
                 }
                 None => (
                     Some(input_value.view((-1, *input_value.size().last().unwrap()))),
@@ -1024,7 +1009,9 @@ impl AlbertForMultipleChoice {
                     embeds.size()[1],
                 ),
                 None => {
-                    return Err("At least one of input ids or input embeddings must be set");
+                    return Err(RustBertError::ValueError(
+                        "At least one of input ids or input embeddings must be set".into(),
+                    ));
                 }
             },
         };
@@ -1067,27 +1054,56 @@ impl AlbertForMultipleChoice {
     }
 }
 
+/// Container for the ALBERT model output.
+pub struct AlbertOutput {
+    /// Last hidden states from the model
+    pub hidden_state: Tensor,
+    /// Pooled output (hidden state for the first token)
+    pub pooled_output: Tensor,
+    /// Hidden states for all intermediate layers
+    pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
+    pub all_attentions: Option<Vec<Vec<Tensor>>>,
+}
+
+/// Container for the ALBERT masked LM model output.
 pub struct AlbertMaskedLMOutput {
+    /// Logits for the vocabulary items at each sequence position
     pub prediction_scores: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Vec<Tensor>>>,
 }
 
+/// Container for the ALBERT sequence classification model
 pub struct AlbertSequenceClassificationOutput {
+    /// Logits for each input (sequence) for each target class
     pub logits: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Vec<Tensor>>>,
 }
 
+/// Container for the ALBERT token classification model
 pub struct AlbertTokenClassificationOutput {
+    /// Logits for each sequence item (token) for each target class
     pub logits: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Vec<Tensor>>>,
 }
 
+/// Container for the ALBERT question answering model
 pub struct AlbertQuestionAnsweringOutput {
+    /// Logits for the start position for token of each input sequence
     pub start_logits: Tensor,
+    /// Logits for the end position for token of each input sequence
     pub end_logits: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Vec<Tensor>>>,
 }

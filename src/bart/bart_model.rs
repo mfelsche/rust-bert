@@ -14,9 +14,10 @@
 use crate::bart::attention::LayerState;
 use crate::bart::decoder::BartDecoder;
 use crate::bart::encoder::{BartEncoder, BartEncoderOutput};
+use crate::common::activations::Activation;
 use crate::common::dropout::Dropout;
 use crate::pipelines::generation::{Cache, LMHeadModel, LMModelOutput};
-use crate::Config;
+use crate::{Config, RustBertError};
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -126,21 +127,6 @@ impl BartMergesResources {
         "bart-large-mnli/merges",
         "https://cdn.huggingface.co/roberta-large-merges.txt",
     );
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Activation {
-    /// Gaussian Error Linear Unit ([Hendrycks et al., 2016,](https://arxiv.org/abs/1606.08415))
-    gelu,
-    /// Rectified Linear Unit
-    relu,
-    /// Swish ([Ramachandran, 2017](https://arxiv.org/abs/1710.05941))
-    swish,
-    /// Gaussian Error Linear Unit - OpenAI version ([Hendrycks et al., 2016,](https://arxiv.org/abs/1606.08415))
-    gelu_new,
-    /// Tanh
-    tanh,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -315,14 +301,14 @@ impl BartModel {
     ///
     /// # Returns
     ///
-    /// * `decoder_output` - `Tensor` of shape (*batch size*, *target_sequence_length*, *hidden_size*) representing the activations of the last decoder hidden state
-    /// * `encoder_hidden_states` - `Tensor` of shape (*batch size*, *source_sequence_length*, *hidden_size*) representing the activations of the last encoder hidden state
-    /// * `decoder_cache` - `(Option<Tensor>, Option<Vec<&LayerState, &LayerState>>)` of length *n_layer* containing the encoder padding mask and past keys and values for
-    /// both the self attention and the encoder cross attention of each layer of the decoder.
-    /// * `all_encoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
-    /// * `all_encoder_attentions` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
-    /// * `all_decoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
-    /// * `all_decoder_attentions` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
+    /// * `BartModelOutput` containing:
+    ///   - `decoder_output` - `Tensor` of shape (*batch size*, *target_sequence_length*, *hidden_size*) representing the activations of the last decoder hidden state
+    ///   - `encoder_hidden_states` - `Tensor` of shape (*batch size*, *source_sequence_length*, *hidden_size*) representing the activations of the last encoder hidden state
+    ///   - `cache` - `(Option<Tensor>, Option<Vec<&LayerState, &LayerState>>)` of length *n_layer* containing the encoder padding mask and past keys and values for both the self attention and the encoder cross attention of each layer of the decoder.
+    ///   - `all_encoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
+    ///   - `all_encoder_attentions` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
+    ///   - `all_decoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
+    ///   - `all_decoder_attentions` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -405,7 +391,7 @@ impl BartModel {
             train,
         );
         BartModelOutput {
-            decoder_hidden_state: decoder_output.hidden_state,
+            decoder_output: decoder_output.hidden_state,
             encoder_hidden_state: encoder_output.hidden_state,
             cache: decoder_output.next_decoder_cache,
             all_decoder_hidden_states: decoder_output.all_hidden_states,
@@ -476,12 +462,14 @@ impl BartForConditionalGeneration {
     ///
     /// # Returns
     ///
-    /// * `lm_logits` - `Tensor` of shape (*batch size*, *target_sequence_length*, *vocab_size*) representing the logits for each vocab item and position
-    /// * `encoder_hidden_states` - `Tensor` of shape (*batch size*, *source_sequence_length*, *hidden_size*) representing the activations of the last encoder hidden state
-    /// * `all_encoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
-    /// * `all_encoder_attentions` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
-    /// * `all_decoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
-    /// * `all_decoder_attentions` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
+    /// * `BartModelOutput` containing:
+    ///   - `decoder_output` - `Tensor` of shape (*batch size*, *target_sequence_length*, *vocab_size*) representing the logits for each vocabulary item and position
+    ///   - `encoder_hidden_states` - `Tensor` of shape (*batch size*, *source_sequence_length*, *hidden_size*) representing the activations of the last encoder hidden state
+    ///   - `cache` - `(Option<Tensor>, Option<Vec<&LayerState, &LayerState>>)` of length *n_layer* containing the encoder padding mask and past keys and values for both the self attention and the encoder cross attention of each layer of the decoder.
+    ///   - `all_encoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
+    ///   - `all_encoder_attentions` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
+    ///   - `all_decoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
+    ///   - `all_decoder_attentions` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -535,10 +523,10 @@ impl BartForConditionalGeneration {
         );
 
         let lm_logits = base_model_output
-            .decoder_hidden_state
+            .decoder_output
             .linear::<Tensor>(&self.base_model.embeddings.ws, None);
         BartModelOutput {
-            decoder_hidden_state: lm_logits,
+            decoder_output: lm_logits,
             ..base_model_output
         }
     }
@@ -672,12 +660,14 @@ impl BartForSequenceClassification {
     ///
     /// # Returns
     ///
-    /// * `logits` - `Tensor` of shape (*batch size*, *num_classes*) representing the logits for each class item and batch item
-    /// * `encoder_hidden_states` - `Tensor` of shape (*batch size*, *source_sequence_length*, *hidden_size*) representing the activations of the last encoder hidden state
-    /// * `all_encoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
-    /// * `all_encoder_attentions` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
-    /// * `all_decoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
-    /// * `all_decoder_attentions` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
+    /// * `BartModelOutput` containing:
+    ///   - `decoder_output` - `Tensor` of shape (*batch size*, *num_classes*) representing the activations for each class and batch item
+    ///   - `encoder_hidden_states` - `Tensor` of shape (*batch size*, *source_sequence_length*, *hidden_size*) representing the activations of the last encoder hidden state
+    ///   - `cache` - `(Option<Tensor>, Option<Vec<&LayerState, &LayerState>>)` of length *n_layer* containing the encoder padding mask and past keys and values for both the self attention and the encoder cross attention of each layer of the decoder.
+    ///   - `all_encoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
+    ///   - `all_encoder_attentions` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
+    ///   - `all_decoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
+    ///   - `all_decoder_attentions` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -731,19 +721,15 @@ impl BartForSequenceClassification {
         let eos_mask = input_ids.eq(self.eos_token_id);
         let reshape = eos_mask.sum1(&[1], true, Int64);
         let sentence_representation = base_model_output
-            .decoder_hidden_state
+            .decoder_output
             .permute(&[2, 0, 1])
             .masked_select(&eos_mask)
             .view((-1, reshape.size()[0] * reshape.int64_value(&[0, 0])))
             .transpose(0, 1)
             .view((
-                base_model_output.decoder_hidden_state.size()[0],
+                base_model_output.decoder_output.size()[0],
                 -1,
-                *base_model_output
-                    .decoder_hidden_state
-                    .size()
-                    .last()
-                    .unwrap(),
+                *base_model_output.decoder_output.size().last().unwrap(),
             ))
             .select(1, -1);
 
@@ -751,7 +737,7 @@ impl BartForSequenceClassification {
             .classification_head
             .forward_t(&sentence_representation, train);
         BartModelOutput {
-            decoder_hidden_state: logits,
+            decoder_output: logits,
             encoder_hidden_state: base_model_output.encoder_hidden_state,
             cache: None,
             all_decoder_hidden_states: base_model_output.all_decoder_hidden_states,
@@ -780,12 +766,13 @@ impl LMHeadModel for BartForConditionalGeneration {
     ///
     /// # Returns
     ///
-    /// * `lm_logits` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*) representing the logits for each vocab item and position
-    /// * `past` - `BartCache` made of `Option<Vec<(Option<Vec<&LayerState, &LayerState>>)>>` of length *n_layer* containing the encoder past keys and values for
+    /// * `LMModelOutput` containing:
+    ///   - `lm_logits` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*) representing the logits for each vocab item and position
+    ///   - `cache` - `BartCache` made of `Option<Vec<(Option<Vec<&LayerState, &LayerState>>)>>` of length *n_layer* containing the encoder past keys and values for
     ///     both the self attention and the encoder cross attention of each layer of the decoder.
-    /// * `encoder_hidden_states` - `Option<Tensor>` Hidden states for the encoder
-    /// * `hidden_states` - None
-    /// * `attentions` - None
+    ///   - `encoder_hidden_states` - `Option<Tensor>` Hidden states for the encoder
+    ///   - `all_hidden_states` - None
+    ///   - `all_attentions` - None
     ///
     /// # Example
     ///
@@ -830,7 +817,7 @@ impl LMHeadModel for BartForConditionalGeneration {
         encoder_outputs: Option<&Tensor>,
         decoder_input_ids: &Option<Tensor>,
         train: bool,
-    ) -> Result<LMModelOutput, &'static str> {
+    ) -> Result<LMModelOutput, RustBertError> {
         let base_model_output = match cache {
             Cache::BARTCache(cached_layer_states) => self.base_model.forward_t(
                 input_ids.as_ref(),
@@ -859,11 +846,15 @@ impl LMHeadModel for BartForConditionalGeneration {
                 None,
                 train,
             ),
-            _ => return Err("Cache not compatible with BART Model"),
+            _ => {
+                return Err(RustBertError::ValueError(
+                    "Cache not compatible with BART Model".into(),
+                ));
+            }
         };
 
         let lm_logits = base_model_output
-            .decoder_hidden_state
+            .decoder_output
             .linear::<Tensor>(&self.base_model.embeddings.ws, None);
         Ok(LMModelOutput {
             lm_logits,
@@ -875,12 +866,23 @@ impl LMHeadModel for BartForConditionalGeneration {
     }
 }
 
+/// Container holding a BART model output. The decoder output may hold the hidden state of
+/// the last layer of the decoder, or may hold logits for a custom head module after the
+/// decoder (e.g. for classification or language modeling tasks)
 pub struct BartModelOutput {
-    pub decoder_hidden_state: Tensor,
+    /// Hidden state of the last layer of the decoder, or logits for a custom head
+    /// module after the decoder (e.g. for classification or language modeling tasks)
+    pub decoder_output: Tensor,
+    /// Hidden state for the last layer of the encoder
     pub encoder_hidden_state: Tensor,
+    /// Cached outputs of the model (attention layers keys and values) if the model is used for generation
     pub cache: Option<Vec<(Option<LayerState>, Option<LayerState>)>>,
+    /// Hidden states for all layers of the decoder
     pub all_decoder_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all layers of the decoder
     pub all_decoder_attentions: Option<Vec<Tensor>>,
+    /// Hidden states for all layers of the encoder
     pub all_encoder_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all layers of the encoder
     pub all_encoder_attentions: Option<Vec<Tensor>>,
 }

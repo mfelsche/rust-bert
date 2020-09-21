@@ -301,7 +301,7 @@ impl SequenceClassificationOption {
                         None,
                         train,
                     )
-                    .decoder_hidden_state
+                    .decoder_output
             }
             Self::Bert(ref model) => {
                 model
@@ -331,7 +331,7 @@ impl SequenceClassificationOption {
                         input_embeds,
                         train,
                     )
-                    .0
+                    .logits
             }
             Self::Albert(ref model) => {
                 model

@@ -13,6 +13,7 @@
 
 use crate::bart::{BartConfig, BartEncoderOutput, BartModel, BartModelOutput, LayerState};
 use crate::pipelines::generation::{Cache, LMHeadModel, LMModelOutput};
+use crate::RustBertError;
 use std::borrow::Borrow;
 use tch::nn::Init;
 use tch::{nn, Tensor};
@@ -295,12 +296,14 @@ impl MarianForConditionalGeneration {
     ///
     /// # Returns
     ///
-    /// * `lm_logits` - `Tensor` of shape (*batch size*, *target_sequence_length*, *vocab_size*) representing the logits for each vocab item and position
-    /// * `encoder_hidden_states` - `Tensor` of shape (*batch size*, *source_sequence_length*, *hidden_size*) representing the activations of the last encoder hidden state
-    /// * `all_encoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
-    /// * `all_encoder_attentions` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
-    /// * `all_decoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
-    /// * `all_decoder_attentions` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
+    /// * `BartModelOutput` containing:
+    ///   - `decoder_output` - `Tensor` of shape (*batch size*, *target_sequence_length*, *vocab_size*) representing the logits for each vocabulary item and position
+    ///   - `encoder_hidden_states` - `Tensor` of shape (*batch size*, *source_sequence_length*, *hidden_size*) representing the activations of the last encoder hidden state
+    ///   - `cache` - `(Option<Tensor>, Option<Vec<&LayerState, &LayerState>>)` of length *n_layer* containing the encoder padding mask and past keys and values for both the self attention and the encoder cross attention of each layer of the decoder.
+    ///   - `all_encoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
+    ///   - `all_encoder_attentions` - `Option<Vec<Tensor>>` of length *num_encoder_layers* with shape (*batch size*, *source_sequence_length*, *hidden_size*)
+    ///   - `all_decoder_hidden_states` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
+    ///   - `all_decoder_attentions` - `Option<Vec<Tensor>>` of length *num_decoder_layers* with shape (*batch size*, *target_sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -358,10 +361,10 @@ impl MarianForConditionalGeneration {
         );
 
         let lm_logits = base_model_output
-            .decoder_hidden_state
+            .decoder_output
             .linear::<Tensor>(&self.base_model.embeddings.ws, None);
         BartModelOutput {
-            decoder_hidden_state: lm_logits,
+            decoder_output: lm_logits,
             ..base_model_output
         }
     }
@@ -398,11 +401,13 @@ impl LMHeadModel for MarianForConditionalGeneration {
     ///
     /// # Returns
     ///
-    /// * `lm_logits` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*) representing the logits for each vocab item and position
-    /// * `past` - None
-    /// * `encoder_hidden_states` - `Option<Tensor>` Hidden states for the encoder
-    /// * `hidden_states` - None
-    /// * `attentions` - None
+    /// * `LMModelOutput` containing:
+    ///   - `lm_logits` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*) representing the logits for each vocab item and position
+    ///   - `cache` - `BartCache` made of `Option<Vec<(Option<Vec<&LayerState, &LayerState>>)>>` of length *n_layer* containing the encoder past keys and values for
+    ///     both the self attention and the encoder cross attention of each layer of the decoder.
+    ///   - `encoder_hidden_states` - `Option<Tensor>` Hidden states for the encoder
+    ///   - `all_hidden_states` - None
+    ///   - `all_attentions` - None
     ///
     /// # Example
     ///
@@ -450,7 +455,7 @@ impl LMHeadModel for MarianForConditionalGeneration {
         encoder_outputs: Option<&Tensor>,
         decoder_input_ids: &Option<Tensor>,
         train: bool,
-    ) -> Result<LMModelOutput, &'static str> {
+    ) -> Result<LMModelOutput, RustBertError> {
         let base_model_output = match cache {
             Cache::BARTCache(cached_layer_states) => self.base_model.forward_t(
                 input_ids.as_ref(),
@@ -478,11 +483,15 @@ impl LMHeadModel for MarianForConditionalGeneration {
                 None,
                 train,
             ),
-            _ => return Err("Cache not compatible with Marian Model"),
+            _ => {
+                return Err(RustBertError::ValueError(
+                    "Cache not compatible with Marian Model".into(),
+                ));
+            }
         };
 
         let lm_logits = base_model_output
-            .decoder_hidden_state
+            .decoder_output
             .linear::<Tensor>(&self.base_model.embeddings.ws, None)
             + &self.final_logits_bias;
         Ok(LMModelOutput {

@@ -60,7 +60,9 @@ mod embeddings;
 mod transformer;
 
 pub use distilbert_model::{
-    Activation, DistilBertConfig, DistilBertConfigResources, DistilBertForQuestionAnswering,
-    DistilBertForTokenClassification, DistilBertModel, DistilBertModelClassifier,
-    DistilBertModelMaskedLM, DistilBertModelResources, DistilBertVocabResources,
+    DistilBertConfig, DistilBertConfigResources, DistilBertForQuestionAnswering,
+    DistilBertForTokenClassification, DistilBertMaskedLMOutput, DistilBertModel,
+    DistilBertModelClassifier, DistilBertModelMaskedLM, DistilBertModelResources,
+    DistilBertQuestionAnsweringOutput, DistilBertSequenceClassificationOutput,
+    DistilBertTokenClassificationOutput, DistilBertVocabResources,
 };

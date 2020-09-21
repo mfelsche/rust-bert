@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::common::activations::Activation;
 use crate::common::dropout::Dropout;
 use crate::common::linear::{linear_no_bias, LinearNoBias};
 use crate::gpt2::transformer::Block;
 use crate::pipelines::generation::{Cache, LMHeadModel, LMModelOutput};
-use crate::Config;
+use crate::{Config, RustBertError};
 use serde::{Deserialize, Serialize};
 use std::borrow::{Borrow, BorrowMut};
 use tch::kind::Kind::Int64;
@@ -161,18 +162,6 @@ impl Gpt2MergesResources {
     );
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Debug, Serialize, Deserialize)]
-/// # Activation function used in the fully connected layers of the transformer block
-pub enum GptActivation {
-    /// Gaussian Error Linear Unit ([Hendrycks et al., 2016,](https://arxiv.org/abs/1606.08415))
-    gelu,
-    /// Rectified Linear Unit
-    relu,
-    /// Swish: a Self-Gated Activation Function ([Ramachandran et al., 2017](https://arxiv.org/pdf/1710.05941v1.pdf))
-    swish,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 /// # GPT2 model configuration
 /// Defines the GPT2 model architecture (e.g. number of layers, hidden layer size, vocab size...).
@@ -181,7 +170,7 @@ pub struct Gpt2Config {
     pub attn_pdrop: Option<f64>,
     pub embd_pdrop: Option<f64>,
     pub hidden_dropout_prob: Option<f64>,
-    pub afn: Option<GptActivation>,
+    pub afn: Option<Activation>,
     pub initializer_range: f64,
     pub layer_norm_epsilon: f64,
     pub n_ctx: i64,
@@ -313,10 +302,11 @@ impl Gpt2Model {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *hidden_size*) representing the activations of the last hidden state
-    /// * `past` - `Option<Vec<Tensor>>` of length *n_layer* containing the past keys and values of each layer of shape (*2*, *batch size*, *number of heads*, *past_sequence_length*, *hidden size per head*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `Gpt2ModelOutput` containing:
+    ///   - `output` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*) representing the activations of the last hidden state
+    ///   - `cache` - `Option<Vec<Tensor>>` of length *n_layer* containing the past keys and values of each layer of shape (*2*, *batch size*, *number of heads*, *past_sequence_length*, *hidden size per head*)
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -375,11 +365,13 @@ impl Gpt2Model {
         position_ids: &Option<Tensor>,
         input_embeds: &Option<Tensor>,
         train: bool,
-    ) -> Result<Gpt2ModelOutput, &'static str> {
+    ) -> Result<Gpt2ModelOutput, RustBertError> {
         let (input_embeddings, seq_length) = match input_ids {
             Some(input_value) => match input_embeds {
                 Some(_) => {
-                    return Err("Only one of input ids or input embeddings may be set");
+                    return Err(RustBertError::ValueError(
+                        "Only one of input ids or input embeddings may be set".into(),
+                    ));
                 }
                 None => (
                     input_value.apply(&self.wte),
@@ -389,7 +381,9 @@ impl Gpt2Model {
             None => match input_embeds {
                 Some(embeds) => (embeds.copy(), embeds.size()[1]),
                 None => {
-                    return Err("At least one of input ids or input embeddings must be set");
+                    return Err(RustBertError::ValueError(
+                        "At least one of input ids or input embeddings must be set".into(),
+                    ));
                 }
             },
         };
@@ -476,7 +470,7 @@ impl Gpt2Model {
         }
 
         Ok(Gpt2ModelOutput {
-            hidden_state: hidden_state.apply(&self.ln_f),
+            output: hidden_state.apply(&self.ln_f),
             cache: all_presents,
             all_hidden_states,
             all_attentions,
@@ -554,11 +548,12 @@ impl LMHeadModel for GPT2LMHeadModel {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*) representing the logits for each vocab item and position
-    /// * `encoder_hidden_states` - None
-    /// * `past` - `Option<Vec<Tensor>>` of length *n_layer* containing the past keys and values of each layer of shape (*2*, *batch size*, *number of heads*, *past_sequence_length*, *hidden size per head*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `LMModelOutput` containing:
+    ///   - `lm_logits` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*) representing the logits for each vocab item and position
+    ///   - `cache` - `Gpt2Cache` made of `Option<Vec<Tensor>>` of length *n_layer* containing the past keys and values of each layer of shape (*2*, *batch size*, *number of heads*, *past_sequence_length*, *hidden size per head*)
+    ///   - `encoder_hidden_states` - None
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -622,9 +617,9 @@ impl LMHeadModel for GPT2LMHeadModel {
         _encoder_outputs: Option<&Tensor>,
         _decoder_input_ids: &Option<Tensor>,
         train: bool,
-    ) -> Result<LMModelOutput, &'static str> {
-        let model_output = match layer_past {
-            Cache::GPT2Cache(layer_past) => Ok(self.transformer.forward_t(
+    ) -> Result<LMModelOutput, RustBertError> {
+        let base_model_output = match layer_past {
+            Cache::GPT2Cache(layer_past) => self.transformer.forward_t(
                 input_ids,
                 &layer_past,
                 attention_mask,
@@ -632,8 +627,8 @@ impl LMHeadModel for GPT2LMHeadModel {
                 position_ids,
                 input_embeds,
                 train,
-            )?),
-            Cache::None => Ok(self.transformer.forward_t(
+            ),
+            Cache::None => self.transformer.forward_t(
                 input_ids,
                 &None,
                 attention_mask,
@@ -641,24 +636,34 @@ impl LMHeadModel for GPT2LMHeadModel {
                 position_ids,
                 input_embeds,
                 train,
-            )?),
-            _ => Err("Cache not compatible with GPT2 model"),
+            ),
+            _ => {
+                return Err(RustBertError::ValueError(
+                    "Cache not compatible with GPT2 Model".into(),
+                ));
+            }
         }?;
 
-        let lm_logits = model_output.hidden_state.apply(&self.lm_head);
+        let lm_logits = base_model_output.output.apply(&self.lm_head);
         Ok(LMModelOutput {
             lm_logits,
             encoder_hidden_state: None,
-            cache: Cache::GPT2Cache(model_output.cache),
-            all_hidden_states: model_output.all_hidden_states,
-            all_attentions: model_output.all_attentions,
+            cache: Cache::GPT2Cache(base_model_output.cache),
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
         })
     }
 }
 
+/// Container for the GPT2 model output.
 pub struct Gpt2ModelOutput {
-    pub hidden_state: Tensor,
+    /// Hidden state of the last layer of the decoder, or logits for a custom head
+    /// module after the decoder (e.g. vocabulary logits for language modeling tasks)
+    pub output: Tensor,
+    /// Cached attention layers keys and values if the model is used for generation
     pub cache: Option<Vec<Tensor>>,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }

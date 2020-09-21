@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use crate::bert::encoder::BertEncoder;
-use crate::bert::{Activation, BertConfig};
-use crate::common::activations::{_gelu, _mish, _relu};
+use crate::bert::BertConfig;
+use crate::common::activations::{Activation, _gelu};
 use crate::common::dropout::Dropout;
 use crate::electra::embeddings::ElectraEmbeddings;
-use crate::Config;
+use crate::{Config, RustBertError};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Borrow, collections::HashMap};
 use tch::{nn, Kind, Tensor};
@@ -188,9 +188,10 @@ impl ElectraModel {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `ElectraModelOutput` containing:
+    ///   - `hidden_state` - `Tensor` of shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -233,18 +234,22 @@ impl ElectraModel {
         position_ids: Option<Tensor>,
         input_embeds: Option<Tensor>,
         train: bool,
-    ) -> Result<ElectraModelOutput, &'static str> {
+    ) -> Result<ElectraModelOutput, RustBertError> {
         let (input_shape, device) = match &input_ids {
             Some(input_value) => match &input_embeds {
                 Some(_) => {
-                    return Err("Only one of input ids or input embeddings may be set");
+                    return Err(RustBertError::ValueError(
+                        "Only one of input ids or input embeddings may be set".into(),
+                    ));
                 }
                 None => (input_value.size(), input_value.device()),
             },
             None => match &input_embeds {
                 Some(embeds) => (vec![embeds.size()[0], embeds.size()[1]], embeds.device()),
                 None => {
-                    return Err("At least one of input ids or input embeddings must be set");
+                    return Err(RustBertError::ValueError(
+                        "At least one of input ids or input embeddings must be set".into(),
+                    ));
                 }
             },
         };
@@ -258,7 +263,9 @@ impl ElectraModel {
             3 => mask.unsqueeze(1),
             2 => mask.unsqueeze(1).unsqueeze(1),
             _ => {
-                return Err("Invalid attention mask dimension, must be 2 or 3");
+                return Err(RustBertError::ValueError(
+                    "Invalid attention mask dimension, must be 2 or 3".into(),
+                ));
             }
         };
 
@@ -349,11 +356,7 @@ impl ElectraDiscriminatorHead {
             1,
             Default::default(),
         );
-        let activation = Box::new(match &config.hidden_act {
-            Activation::gelu => _gelu,
-            Activation::relu => _relu,
-            Activation::mish => _mish,
-        });
+        let activation = config.hidden_act.get_function();
         ElectraDiscriminatorHead {
             dense,
             dense_prediction,
@@ -370,8 +373,6 @@ impl ElectraDiscriminatorHead {
     /// # Returns
     ///
     /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -570,9 +571,10 @@ impl ElectraForMaskedLM {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `ElectraMaskedLMOutput` containing:
+    ///   - `prediction_scores` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*)
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -614,7 +616,7 @@ impl ElectraForMaskedLM {
         input_embeds: Option<Tensor>,
         train: bool,
     ) -> ElectraMaskedLMOutput {
-        let model_output = self
+        let base_model_output = self
             .electra
             .forward_t(
                 input_ids,
@@ -625,12 +627,12 @@ impl ElectraForMaskedLM {
                 train,
             )
             .unwrap();
-        let hidden_states = self.generator_head.forward(&model_output.hidden_state);
+        let hidden_states = self.generator_head.forward(&base_model_output.hidden_state);
         let prediction_scores = hidden_states.apply(&self.lm_head);
         ElectraMaskedLMOutput {
             prediction_scores,
-            all_hidden_states: model_output.all_hidden_states,
-            all_attentions: model_output.all_attentions,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
         }
     }
 }
@@ -697,9 +699,10 @@ impl ElectraDiscriminator {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `ElectraDiscriminatorOutput` containing:
+    ///   - `logits` - `Tensor` of shape (*batch size*, *sequence_length*) containing the probability of each token to be generated by a language model
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -739,7 +742,7 @@ impl ElectraDiscriminator {
         input_embeds: Option<Tensor>,
         train: bool,
     ) -> ElectraDiscriminatorOutput {
-        let model_output = self
+        let base_model_output = self
             .electra
             .forward_t(
                 input_ids,
@@ -752,12 +755,12 @@ impl ElectraDiscriminator {
             .unwrap();
         let probabilities = self
             .discriminator_head
-            .forward(&model_output.hidden_state)
+            .forward(&base_model_output.hidden_state)
             .sigmoid();
         ElectraDiscriminatorOutput {
             probabilities,
-            all_hidden_states: model_output.all_hidden_states,
-            all_attentions: model_output.all_attentions,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
         }
     }
 }
@@ -837,9 +840,10 @@ impl ElectraForTokenClassification {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *num_classes*)
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `ElectraTokenClassificationOutput` containing:
+    ///   - `logits` - `Tensor` of shape (*batch size*, *sequence_length*, *num_labels*) containing the logits for each of the input tokens and classes
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -879,7 +883,7 @@ impl ElectraForTokenClassification {
         input_embeds: Option<Tensor>,
         train: bool,
     ) -> ElectraTokenClassificationOutput {
-        let model_output = self
+        let base_model_output = self
             .electra
             .forward_t(
                 input_ids,
@@ -890,38 +894,54 @@ impl ElectraForTokenClassification {
                 train,
             )
             .unwrap();
-        let logits = model_output
+        let logits = base_model_output
             .hidden_state
             .apply_t(&self.dropout, train)
             .apply(&self.classifier);
         ElectraTokenClassificationOutput {
             logits,
-            all_hidden_states: model_output.all_hidden_states,
-            all_attentions: model_output.all_attentions,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
         }
     }
 }
 
+/// Container for the Electra model output.
 pub struct ElectraModelOutput {
+    /// Last hidden states from the model
     pub hidden_state: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }
 
+/// Container for the Electra discriminator model output.
 pub struct ElectraDiscriminatorOutput {
+    /// Probabilities for each sequence item (token) to be generated by a language model
     pub probabilities: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }
 
+/// Container for the Electra masked LM model output.
 pub struct ElectraMaskedLMOutput {
+    /// Logits for the vocabulary items at each sequence position
     pub prediction_scores: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }
 
+/// Container for the Electra token classification model output.
 pub struct ElectraTokenClassificationOutput {
+    /// Logits for each sequence item (token) for each target class
     pub logits: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }

@@ -18,7 +18,7 @@
 //! pre-trained models in each model module.
 
 use crate::common::error::RustBertError;
-use cached_path::Cache;
+use cached_path::{Cache, Options, ProgressBar};
 use lazy_static::lazy_static;
 use std::env;
 use std::path::PathBuf;
@@ -59,8 +59,10 @@ impl Resource {
         match self {
             Resource::Local(resource) => Ok(resource.local_path.clone()),
             Resource::Remote(resource) => {
-                let cached_path =
-                    CACHE.cached_path_in_subdir(&resource.url, Some(&resource.cache_subdir))?;
+                let cached_path = CACHE.cached_path_with_options(
+                    &resource.url,
+                    &Options::default().subdir(&resource.cache_subdir),
+                )?;
                 Ok(cached_path)
             }
         }
@@ -101,8 +103,8 @@ impl RemoteResource {
     /// ```no_run
     /// use rust_bert::resources::{RemoteResource, Resource};
     /// let config_resource = Resource::Remote(RemoteResource::new(
-    ///     "http://config_json_location",
     ///     "configs",
+    ///     "http://config_json_location",
     /// ));
     /// ```
     pub fn new(url: &str, cache_subdir: &str) -> RemoteResource {
@@ -134,12 +136,9 @@ impl RemoteResource {
     /// )));
     /// ```
     pub fn from_pretrained(name_url_tuple: (&str, &str)) -> RemoteResource {
-        let name = name_url_tuple.0.to_string();
+        let cache_subdir = name_url_tuple.0.to_string();
         let url = name_url_tuple.1.to_string();
-        RemoteResource {
-            url,
-            cache_subdir: name,
-        }
+        RemoteResource { cache_subdir, url }
     }
 }
 
@@ -148,7 +147,10 @@ lazy_static! {
 /// # Global cache directory
 /// If the environment variable `RUSTBERT_CACHE` is set, will save the cache model files at that
 /// location. Otherwise defaults to `~/.cache/.rustbert`.
-    pub static ref CACHE: Cache = Cache::builder().dir(_get_cache_directory()).build().unwrap();
+    pub static ref CACHE: Cache = Cache::builder()
+        .dir(_get_cache_directory())
+        .progress_bar(Some(ProgressBar::Light))
+        .build().unwrap();
 }
 
 fn _get_cache_directory() -> PathBuf {

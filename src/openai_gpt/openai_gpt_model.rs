@@ -17,6 +17,7 @@ use crate::common::linear::{linear_no_bias, LinearNoBias};
 use crate::gpt2::Gpt2Config;
 use crate::openai_gpt::transformer::Block;
 use crate::pipelines::generation::{Cache, LMHeadModel, LMModelOutput};
+use crate::RustBertError;
 use std::borrow::{Borrow, BorrowMut};
 use tch::kind::Kind::Int64;
 use tch::nn::embedding;
@@ -166,9 +167,10 @@ impl OpenAiGptModel {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *hidden_size*) representing the activations of the last hidden state
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `OpenAiGptModelOutput` containing:
+    ///   - `output` - `Tensor` of shape (*batch size*, *sequence_length*, *hidden_size*) representing the activations of the last hidden state
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -213,11 +215,13 @@ impl OpenAiGptModel {
         position_ids: &Option<Tensor>,
         input_embeds: &Option<Tensor>,
         train: bool,
-    ) -> Result<OpenAiGptOutput, &'static str> {
+    ) -> Result<OpenAiGptModelOutput, RustBertError> {
         let (input_embeddings, seq_length) = match input_ids {
             Some(input_value) => match input_embeds {
                 Some(_) => {
-                    return Err("Only one of input ids or input embeddings may be set");
+                    return Err(RustBertError::ValueError(
+                        "Only one of input ids or input embeddings may be set".into(),
+                    ));
                 }
                 None => (
                     input_value.apply(&self.tokens_embed),
@@ -227,7 +231,9 @@ impl OpenAiGptModel {
             None => match input_embeds {
                 Some(embeds) => (embeds.copy(), embeds.size()[1]),
                 None => {
-                    return Err("At least one of input ids or input embeddings must be set");
+                    return Err(RustBertError::ValueError(
+                        "At least one of input ids or input embeddings must be set".into(),
+                    ));
                 }
             },
         };
@@ -279,7 +285,7 @@ impl OpenAiGptModel {
             };
         }
 
-        Ok(OpenAiGptOutput {
+        Ok(OpenAiGptModelOutput {
             hidden_state,
             all_hidden_states,
             all_attentions,
@@ -358,11 +364,12 @@ impl LMHeadModel for OpenAIGPTLMHeadModel {
     ///
     /// # Returns
     ///
-    /// * `output` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*) representing the logits for each vocab item and position
-    /// * `encoder_hidden_states` - None
-    /// * `past` - None
-    /// * `hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
-    /// * `attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    /// * `LMModelOutput` containing:
+    ///   - `lm_logits` - `Tensor` of shape (*batch size*, *sequence_length*, *vocab_size*) representing the logits for each vocab item and position
+    ///   - `cache` - None
+    ///   - `encoder_hidden_states` - None
+    ///   - `all_hidden_states` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
+    ///   - `all_attentions` - `Option<Vec<Tensor>>` of length *num_hidden_layers* with shape (*batch size*, *sequence_length*, *hidden_size*)
     ///
     /// # Example
     ///
@@ -410,8 +417,8 @@ impl LMHeadModel for OpenAIGPTLMHeadModel {
         _encoder_outputs: Option<&Tensor>,
         _decoder_input_ids: &Option<Tensor>,
         train: bool,
-    ) -> Result<LMModelOutput, &'static str> {
-        let model_output = self.transformer.forward_t(
+    ) -> Result<LMModelOutput, RustBertError> {
+        let base_model_output = self.transformer.forward_t(
             input_ids,
             attention_mask,
             token_type_ids,
@@ -420,19 +427,24 @@ impl LMHeadModel for OpenAIGPTLMHeadModel {
             train,
         )?;
 
-        let lm_logits = model_output.hidden_state.apply(&self.lm_head);
+        let lm_logits = base_model_output.hidden_state.apply(&self.lm_head);
         Ok(LMModelOutput {
             lm_logits,
             encoder_hidden_state: None,
             cache: Cache::None,
-            all_hidden_states: model_output.all_hidden_states,
-            all_attentions: model_output.all_attentions,
+            all_hidden_states: base_model_output.all_hidden_states,
+            all_attentions: base_model_output.all_attentions,
         })
     }
 }
 
-pub struct OpenAiGptOutput {
+/// Container for the OpenAI GPT model output.
+pub struct OpenAiGptModelOutput {
+    /// Hidden state of the last layer of the decoder, or logits for a custom head
+    /// module after the decoder (e.g. vocabulary logits for language modeling tasks)
     pub hidden_state: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }

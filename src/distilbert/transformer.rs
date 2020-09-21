@@ -10,10 +10,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::common::activations::{_gelu, _relu};
 use crate::common::dropout::Dropout;
 use crate::distilbert::attention::MultiHeadSelfAttention;
-use crate::distilbert::distilbert_model::{Activation, DistilBertConfig};
+use crate::distilbert::distilbert_model::DistilBertConfig;
 use std::borrow::{Borrow, BorrowMut};
 use tch::nn::LayerNorm;
 use tch::{nn, Tensor};
@@ -44,10 +43,7 @@ impl FeedForwardNetwork {
             Default::default(),
         );
         let dropout = Dropout::new(config.dropout);
-        let activation = Box::new(match &config.activation {
-            Activation::gelu => _gelu,
-            Activation::relu => _relu,
-        });
+        let activation = config.activation.get_function();
         FeedForwardNetwork {
             lin1,
             lin2,
@@ -185,8 +181,12 @@ impl Transformer {
     }
 }
 
+/// Container for the DistilBert transformer output.
 pub struct DistilBertTransformerOutput {
+    /// Last hidden states from the model
     pub hidden_state: Tensor,
+    /// Hidden states for all intermediate layers
     pub all_hidden_states: Option<Vec<Tensor>>,
+    /// Attention weights for all intermediate layers
     pub all_attentions: Option<Vec<Tensor>>,
 }

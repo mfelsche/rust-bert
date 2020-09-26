@@ -25,6 +25,8 @@ fn create_qa_model() -> QuestionAnsweringModel {
         Resource::Remote(RemoteResource::from_pretrained(BertVocabResources::BERT_QA)),
         None,  //merges resource only relevant with ModelType::Roberta
         false, //lowercase
+        false,
+        None,
     );
     QuestionAnsweringModel::new(config).unwrap()
 }
@@ -92,6 +94,8 @@ fn qa_load_model(iters: u64) -> Duration {
             Resource::Remote(RemoteResource::from_pretrained(BertVocabResources::BERT_QA)),
             None,  //merges resource only relevant with ModelType::Roberta
             false, //lowercase
+            false,
+            None,
         );
         let _ = QuestionAnsweringModel::new(config).unwrap();
         duration = duration.checked_add(start.elapsed()).unwrap();

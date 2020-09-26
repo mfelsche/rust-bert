@@ -11,14 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate failure;
-
 use rust_bert::pipelines::translation::{Language, TranslationConfig, TranslationModel};
+use rust_bert::RustBertError;
 use std::time::Instant;
 use tch::Device;
 use torch_sys::dummy_cuda_dependency;
 
-fn main() -> failure::Fallible<()> {
+fn main() -> Result<(), RustBertError> {
     unsafe {
         torch_sys::dummy_cuda_dependency();
     }

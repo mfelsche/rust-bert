@@ -81,7 +81,7 @@ impl SelfAttention {
         encoder_decoder_attention: bool,
         store_cache: bool,
         output_attentions: bool,
-    ) -> SelfAttention
+    ) -> Self
     where
         P: Borrow<nn::Path<'p>>,
     {

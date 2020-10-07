@@ -329,6 +329,7 @@ impl RobertaForMaskedLM {
     }
 }
 
+#[derive(Debug)]
 pub struct RobertaClassificationHead {
     dense: nn::Linear,
     dropout: Dropout,
@@ -383,6 +384,7 @@ impl RobertaClassificationHead {
 /// It is made of the following blocks:
 /// - `roberta`: Base RoBERTa model
 /// - `classifier`: RoBERTa classification head made of 2 linear layers
+#[derive(Debug)]
 pub struct RobertaForSequenceClassification {
     roberta: BertModel<RobertaEmbeddings>,
     classifier: RobertaClassificationHead,

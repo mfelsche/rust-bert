@@ -116,6 +116,7 @@ impl Config<XLNetConfig> for XLNetConfig {}
 /// - `word_embeddings`: Word embeddings
 /// - `mask_emb`: Embedding for the query stream
 /// - `layers`: Vector of `XLNetLayer`. Each layer is made of a self-attention layers on the visible and hidden states and a post-attention layer
+#[derive(Debug)]
 pub struct XLNetModel {
     mem_len: Option<i64>,
     reuse_len: Option<i64>,
@@ -880,6 +881,7 @@ impl LMHeadModel for XLNetLMHeadModel {
 /// - `base_model`: `XLNetModel`
 /// - `sequence_summary`: `SequenceSummary` to pool the base model hidden states
 /// - `logits_proj`: Linear layer projecting the hidden layer pooled output to the target space
+#[derive(Debug)]
 pub struct XLNetForSequenceClassification {
     base_model: XLNetModel,
     sequence_summary: SequenceSummary,

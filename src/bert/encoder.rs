@@ -16,6 +16,7 @@ use crate::bert::bert_model::BertConfig;
 use std::borrow::{Borrow, BorrowMut};
 use tch::{nn, Tensor};
 
+#[derive(Debug)]
 pub struct BertLayer {
     attention: BertAttention,
     is_decoder: bool,
@@ -94,6 +95,7 @@ impl BertLayer {
     }
 }
 
+#[derive(Debug)]
 pub struct BertEncoder {
     output_attentions: bool,
     output_hidden_states: bool,

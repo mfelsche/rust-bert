@@ -221,6 +221,7 @@ impl BertAttention {
     }
 }
 
+#[derive(Debug)]
 pub struct BertIntermediate {
     lin: nn::Linear,
     activation: TensorFunction,
@@ -248,6 +249,7 @@ impl BertIntermediate {
     }
 }
 
+#[derive(Debug)]
 pub struct BertOutput {
     lin: nn::Linear,
     layer_norm: nn::LayerNorm,

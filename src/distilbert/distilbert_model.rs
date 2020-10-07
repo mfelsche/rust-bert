@@ -119,6 +119,7 @@ impl Config<DistilBertConfig> for DistilBertConfig {}
 /// It is made of the following blocks:
 /// - `embeddings`: `token`, `position` embeddings
 /// - `transformer`: Transformer made of a vector of layers. Each layer is made of a multi-head self-attention layer, layer norm and linear layers.
+#[derive(Debug)]
 pub struct DistilBertModel {
     embeddings: DistilBertEmbedding,
     transformer: Transformer,
@@ -237,6 +238,7 @@ impl DistilBertModel {
 /// - `distil_bert_model`: Base DistilBertModel
 /// - `pre_classifier`: DistilBERT linear layer for classification
 /// - `classifier`: DistilBERT linear layer for classification
+#[derive(Debug)]
 pub struct DistilBertModelClassifier {
     distil_bert_model: DistilBertModel,
     pre_classifier: nn::Linear,

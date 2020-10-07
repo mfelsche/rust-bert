@@ -78,6 +78,7 @@ pub enum ConfigOption {
     XLNet(XLNetConfig),
 }
 
+#[derive(Debug)]
 /// # Abstraction that holds a particular tokenizer, can be of any of the supported models
 pub enum TokenizerOption {
     /// Bert Tokenizer

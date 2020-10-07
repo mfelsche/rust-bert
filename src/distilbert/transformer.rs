@@ -18,6 +18,7 @@ use std::borrow::{Borrow, BorrowMut};
 use tch::nn::LayerNorm;
 use tch::{nn, Tensor};
 
+#[derive(Debug)]
 pub struct FeedForwardNetwork {
     lin1: nn::Linear,
     lin2: nn::Linear,
@@ -60,6 +61,7 @@ impl FeedForwardNetwork {
     }
 }
 
+#[derive(Debug)]
 pub struct TransformerBlock {
     attention: MultiHeadSelfAttention,
     sa_layer_norm: LayerNorm,
@@ -108,6 +110,7 @@ impl TransformerBlock {
     }
 }
 
+#[derive(Debug)]
 pub struct Transformer {
     output_attentions: bool,
     output_hidden_states: bool,

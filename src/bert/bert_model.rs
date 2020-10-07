@@ -118,6 +118,7 @@ impl Config<BertConfig> for BertConfig {}
 /// - `encoder`: Encoder (transformer) made of a vector of layers. Each layer is made of a self-attention layer, an intermediate (linear) and output (linear + layer norm) layers
 /// - `pooler`: linear layer applied to the first element of the sequence (*[MASK]* token)
 /// - `is_decoder`: Flag indicating if the model is used as a decoder. If set to true, a causal mask will be applied to hide future positions that should not be attended to.
+#[derive(Debug)]
 pub struct BertModel<T: BertEmbedding> {
     embeddings: T,
     encoder: BertEncoder,
@@ -550,6 +551,7 @@ impl BertForMaskedLM {
 /// It is made of the following blocks:
 /// - `bert`: Base BertModel
 /// - `classifier`: BERT linear layer for classification
+#[derive(Debug)]
 pub struct BertForSequenceClassification {
     bert: BertModel<BertEmbeddings>,
     dropout: Dropout,

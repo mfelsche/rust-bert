@@ -65,6 +65,7 @@ impl From<&XLNetConfig> for SummaryConfig {
     }
 }
 
+#[derive(Debug)]
 pub struct SequenceSummary {
     summary: Option<nn::Linear>,
     summary_type: SummaryType,

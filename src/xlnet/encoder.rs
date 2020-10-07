@@ -19,6 +19,7 @@ use crate::xlnet::XLNetConfig;
 use std::borrow::Borrow;
 use tch::{nn, Tensor};
 
+#[derive(Debug)]
 pub struct XLNetFeedForward {
     layer_1: nn::Linear,
     layer_2: nn::Linear,
@@ -76,6 +77,7 @@ impl XLNetFeedForward {
     }
 }
 
+#[derive(Debug)]
 pub struct XLNetLayer {
     rel_attn: XLNetRelativeAttention,
     ff: XLNetFeedForward,

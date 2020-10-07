@@ -57,8 +57,8 @@
 //! ]
 //! # ;
 //! ```
-use crate::albert::AlbertForSequenceClassification;
-use crate::bart::BartForSequenceClassification;
+//use crate::albert::AlbertForSequenceClassification;
+//use crate::bart::BartForSequenceClassification;
 use crate::bert::BertForSequenceClassification;
 use crate::common::error::RustBertError;
 use crate::common::resources::{RemoteResource, Resource};
@@ -189,7 +189,7 @@ pub enum SequenceClassificationOption {
     /// XLNet for Sequence Classification
     XLNet(XLNetForSequenceClassification),
     /// Bart for Sequence Classification
-    Bart(BartForSequenceClassification),
+    //Bart(BartForSequenceClassification),
 }
 
 impl SequenceClassificationOption {
@@ -262,7 +262,7 @@ impl SequenceClassificationOption {
                     panic!("You can only supply an XLNetConfig for XLNet!");
                 }
             }
-            ModelType::Bart => {
+            /* ModelType::Bart => {
                 if let ConfigOption::Bart(config) = config {
                     SequenceClassificationOption::Bart(BartForSequenceClassification::new(
                         p, config,
@@ -270,7 +270,7 @@ impl SequenceClassificationOption {
                 } else {
                     panic!("You can only supply a BertConfig for Bert!");
                 }
-            }
+            } */
             ModelType::Electra => {
                 panic!("SequenceClassification not implemented for Electra!");
             }
@@ -292,7 +292,7 @@ impl SequenceClassificationOption {
             Self::DistilBert(_) => ModelType::DistilBert,
             //Self::Albert(_) => ModelType::Albert,
             Self::XLNet(_) => ModelType::XLNet,
-            Self::Bart(_) => ModelType::Bart,
+            //Self::Bart(_) => ModelType::Bart,
         }
     }
 
@@ -307,7 +307,7 @@ impl SequenceClassificationOption {
         train: bool,
     ) -> Tensor {
         match *self {
-            Self::Bart(ref model) => {
+            /* Self::Bart(ref model) => {
                 model
                     .forward_t(
                         &input_ids.expect("`input_ids` must be provided for BART models"),
@@ -318,7 +318,7 @@ impl SequenceClassificationOption {
                         train,
                     )
                     .decoder_output
-            }
+            } */
             Self::Bert(ref model) => {
                 model
                     .forward_t(

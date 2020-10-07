@@ -381,6 +381,7 @@ impl SequenceClassificationOption {
     }
 }
 
+#[derive(Debug)]
 /// # SequenceClassificationModel for Classification (e.g. Sentiment Analysis)
 pub struct SequenceClassificationModel {
     tokenizer: TokenizerOption,

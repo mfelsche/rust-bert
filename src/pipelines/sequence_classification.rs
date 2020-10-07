@@ -184,7 +184,8 @@ pub enum SequenceClassificationOption {
     /// XLMRoberta for Sequence Classification
     XLMRoberta(RobertaForSequenceClassification),
     /// Albert for Sequence Classification
-    Albert(AlbertForSequenceClassification),
+    // we need to exclude it for now as it is not send, we need to fix this
+    //Albert(AlbertForSequenceClassification),
     /// XLNet for Sequence Classification
     XLNet(XLNetForSequenceClassification),
     /// Bart for Sequence Classification
@@ -242,13 +243,15 @@ impl SequenceClassificationOption {
                 }
             }
             ModelType::Albert => {
+                panic!("We dont support Albert now, as it is not send.")
+                /*
                 if let ConfigOption::Albert(config) = config {
                     SequenceClassificationOption::Albert(AlbertForSequenceClassification::new(
                         p, config,
                     ))
                 } else {
                     panic!("You can only supply an AlbertConfig for Albert!");
-                }
+                }*/
             }
             ModelType::XLNet => {
                 if let ConfigOption::XLNet(config) = config {
@@ -287,7 +290,7 @@ impl SequenceClassificationOption {
             Self::Roberta(_) => ModelType::Roberta,
             Self::XLMRoberta(_) => ModelType::Roberta,
             Self::DistilBert(_) => ModelType::DistilBert,
-            Self::Albert(_) => ModelType::Albert,
+            //Self::Albert(_) => ModelType::Albert,
             Self::XLNet(_) => ModelType::XLNet,
             Self::Bart(_) => ModelType::Bart,
         }
@@ -346,7 +349,7 @@ impl SequenceClassificationOption {
                     )
                     .logits
             }
-            Self::Albert(ref model) => {
+            /* Self::Albert(ref model) => {
                 model
                     .forward_t(
                         input_ids,
@@ -357,7 +360,7 @@ impl SequenceClassificationOption {
                         train,
                     )
                     .logits
-            }
+            } */
             Self::XLNet(ref model) => {
                 model
                     .forward_t(

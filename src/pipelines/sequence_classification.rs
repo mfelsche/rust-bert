@@ -262,15 +262,17 @@ impl SequenceClassificationOption {
                     panic!("You can only supply an XLNetConfig for XLNet!");
                 }
             }
-            /* ModelType::Bart => {
+            ModelType::Bart => {
+                panic!("We dont support bart because it isnt Send.")
+                /*
                 if let ConfigOption::Bart(config) = config {
                     SequenceClassificationOption::Bart(BartForSequenceClassification::new(
                         p, config,
                     ))
                 } else {
                     panic!("You can only supply a BertConfig for Bert!");
-                }
-            } */
+                }*/
+            }
             ModelType::Electra => {
                 panic!("SequenceClassification not implemented for Electra!");
             }

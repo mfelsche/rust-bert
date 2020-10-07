@@ -183,12 +183,12 @@ pub enum SequenceClassificationOption {
     Roberta(RobertaForSequenceClassification),
     /// XLMRoberta for Sequence Classification
     XLMRoberta(RobertaForSequenceClassification),
-    /// Albert for Sequence Classification
+    // Albert for Sequence Classification
     // we need to exclude it for now as it is not send, we need to fix this
     //Albert(AlbertForSequenceClassification),
     /// XLNet for Sequence Classification
     XLNet(XLNetForSequenceClassification),
-    /// Bart for Sequence Classification
+    // Bart for Sequence Classification
     //Bart(BartForSequenceClassification),
 }
 

@@ -13,7 +13,7 @@
 
 use crate::bert::embeddings::{BertEmbedding, BertEmbeddings};
 use crate::bert::encoder::{BertEncoder, BertPooler};
-use crate::common::activations::Activation;
+use crate::common::activations::{Activation, TensorFunction};
 use crate::common::dropout::Dropout;
 use crate::common::linear::{linear_no_bias, LinearNoBias};
 use crate::{Config, RustBertError};
@@ -345,7 +345,7 @@ impl<T: BertEmbedding> BertModel<T> {
 
 pub struct BertPredictionHeadTransform {
     dense: nn::Linear,
-    activation: Box<dyn Fn(&Tensor) -> Tensor>,
+    activation: TensorFunction,
     layer_norm: nn::LayerNorm,
 }
 
@@ -378,7 +378,7 @@ impl BertPredictionHeadTransform {
     }
 
     pub fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        ((&self.activation)(&hidden_states.apply(&self.dense))).apply(&self.layer_norm)
+        ((&self.activation.0)(&hidden_states.apply(&self.dense))).apply(&self.layer_norm)
     }
 }
 

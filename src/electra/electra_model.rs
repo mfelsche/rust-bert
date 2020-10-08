@@ -14,7 +14,7 @@
 
 use crate::bert::encoder::BertEncoder;
 use crate::bert::BertConfig;
-use crate::common::activations::{Activation, _gelu};
+use crate::common::activations::{Activation, TensorFunction, _gelu};
 use crate::common::dropout::Dropout;
 use crate::electra::embeddings::ElectraEmbeddings;
 use crate::{Config, RustBertError};
@@ -304,7 +304,7 @@ impl ElectraModel {
 pub struct ElectraDiscriminatorHead {
     dense: nn::Linear,
     dense_prediction: nn::Linear,
-    activation: Box<dyn Fn(&Tensor) -> Tensor>,
+    activation: TensorFunction,
 }
 
 /// Defines the implementation of the ElectraDiscriminatorHead.
@@ -389,7 +389,7 @@ impl ElectraDiscriminatorHead {
     /// ```
     pub fn forward(&self, encoder_hidden_states: &Tensor) -> Tensor {
         let output = encoder_hidden_states.apply(&self.dense);
-        let output = (self.activation)(&output);
+        let output = (self.activation.0)(&output);
         output.apply(&self.dense_prediction).squeeze()
     }
 }
@@ -403,7 +403,7 @@ impl ElectraDiscriminatorHead {
 pub struct ElectraGeneratorHead {
     dense: nn::Linear,
     layer_norm: nn::LayerNorm,
-    activation: Box<dyn Fn(&Tensor) -> Tensor>,
+    activation: TensorFunction,
 }
 
 /// Defines the implementation of the ElectraGeneratorHead.
@@ -446,7 +446,7 @@ impl ElectraGeneratorHead {
             config.embedding_size,
             Default::default(),
         );
-        let activation = Box::new(_gelu);
+        let activation = TensorFunction(Box::new(_gelu));
 
         ElectraGeneratorHead {
             layer_norm,
@@ -488,7 +488,7 @@ impl ElectraGeneratorHead {
     /// ```
     pub fn forward(&self, encoder_hidden_states: &Tensor) -> Tensor {
         let output = encoder_hidden_states.apply(&self.dense);
-        let output = (self.activation)(&output);
+        let output = (self.activation.0)(&output);
         output.apply(&self.layer_norm)
     }
 }

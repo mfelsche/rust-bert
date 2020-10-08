@@ -13,6 +13,7 @@
 
 use crate::albert::attention::AlbertSelfAttention;
 use crate::albert::AlbertConfig;
+use crate::common::activations::TensorFunction;
 use std::borrow::{Borrow, BorrowMut};
 use tch::{nn, Tensor};
 
@@ -21,7 +22,7 @@ pub struct AlbertLayer {
     full_layer_layer_norm: nn::LayerNorm,
     ffn: nn::Linear,
     ffn_output: nn::Linear,
-    activation: Box<dyn Fn(&Tensor) -> Tensor>,
+    activation: TensorFunction,
 }
 
 impl AlbertLayer {
@@ -77,7 +78,7 @@ impl AlbertLayer {
         let (attention_output, attention_weights) =
             self.attention.forward_t(hidden_states, mask, train);
         let ffn_output = attention_output.apply(&self.ffn);
-        let ffn_output: Tensor = (self.activation)(&ffn_output);
+        let ffn_output: Tensor = (self.activation.0)(&ffn_output);
         let ffn_output = ffn_output.apply(&self.ffn_output);
         let ffn_output = (ffn_output + attention_output).apply(&self.full_layer_layer_norm);
 

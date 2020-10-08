@@ -28,6 +28,11 @@ pub fn _tanh(x: &Tensor) -> Tensor {
 
 pub struct TensorFunction(Box<fn(&Tensor) -> Tensor>);
 
+impl TensorFunction {
+    pub fn new(fun: Box<fn(&Tensor) -> Tensor>) -> Self {
+        Self(fun)
+    }
+}
 impl std::fmt::Debug for TensorFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         write!(f, "TensorFunction")

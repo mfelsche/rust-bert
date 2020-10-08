@@ -102,7 +102,7 @@ impl SequenceSummary {
         };
 
         let activation = if config.summary_activation.is_some() {
-            Some(TensorFunction(Box::new(
+            Some(TensorFunction::new(Box::new(
                 match config.summary_activation.as_ref().unwrap() {
                     Activation::gelu => _gelu,
                     Activation::relu => _relu,

@@ -140,7 +140,7 @@ impl AlbertModel {
             config.hidden_size,
             Default::default(),
         );
-        let pooler_activation = TensorFunction(Box::new(_tanh));
+        let pooler_activation = TensorFunction::new(Box::new(_tanh));
 
         AlbertModel {
             embeddings,

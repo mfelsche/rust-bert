@@ -446,7 +446,7 @@ impl ElectraGeneratorHead {
             config.embedding_size,
             Default::default(),
         );
-        let activation = TensorFunction(Box::new(_gelu));
+        let activation = TensorFunction::new(Box::new(_gelu));
 
         ElectraGeneratorHead {
             layer_norm,

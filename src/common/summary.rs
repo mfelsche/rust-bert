@@ -172,7 +172,7 @@ impl SequenceSummary {
         };
 
         if let Some(activation_fn) = &self.activation {
-            output = activation_fn(&output)
+            output = activation_fn.0(&output)
         };
 
         if let Some(last_dropout) = &self.last_dropout {

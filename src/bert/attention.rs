@@ -245,7 +245,7 @@ impl BertIntermediate {
     }
 
     pub fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        (self.activation)(&hidden_states.apply(&self.lin))
+        (self.activation.0)(&hidden_states.apply(&self.lin))
     }
 }
 

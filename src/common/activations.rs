@@ -26,7 +26,7 @@ pub fn _tanh(x: &Tensor) -> Tensor {
     x.tanh()
 }
 
-pub type TensorFunction = Box<fn(&Tensor) -> Tensor>;
+pub struct TensorFunction(Box<fn(&Tensor) -> Tensor>);
 
 impl std::fmt::Debug for TensorFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
@@ -54,12 +54,12 @@ pub enum Activation {
 impl Activation {
     pub fn get_function(&self) -> TensorFunction {
         Box::new(match self {
-            Activation::gelu => _gelu,
-            Activation::relu => _relu,
-            Activation::swish => _swish,
-            Activation::gelu_new => _gelu_new,
-            Activation::mish => _mish,
-            Activation::tanh => _tanh,
+            Activation::gelu => TensorFunction(_gelu),
+            Activation::relu => TensorFunction(_relu),
+            Activation::swish => TensorFunction(_swish),
+            Activation::gelu_new => TensorFunction(_gelu_new),
+            Activation::mish => TensorFunction(_mish),
+            Activation::tanh => TensorFunction(_tanh),
         })
     }
 }

@@ -32,6 +32,10 @@ impl TensorFunction {
     pub fn new(fun: Box<fn(&Tensor) -> Tensor>) -> Self {
         Self(fun)
     }
+
+    pub fn get_fn(&self) -> &Box<fn(&Tensor) -> Tensor> {
+        &self.0
+    }
 }
 impl std::fmt::Debug for TensorFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {

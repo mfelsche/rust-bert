@@ -250,7 +250,7 @@ impl AlbertModel {
         let pooled_output = self
             .pooler
             .forward(&transformer_output.hidden_state.select(1, 0));
-        let pooled_output = (self.pooler_activation.0)(&pooled_output);
+        let pooled_output = (self.pooler_activation.get_fn())(&pooled_output);
 
         Ok(AlbertOutput {
             hidden_state: transformer_output.hidden_state,
@@ -309,7 +309,7 @@ impl AlbertMLMHead {
     }
 
     pub fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        let output: Tensor = (self.activation.0)(&hidden_states.apply(&self.dense));
+        let output: Tensor = (self.activation.get_fn())(&hidden_states.apply(&self.dense));
         output.apply(&self.layer_norm).apply(&self.decoder)
     }
 }

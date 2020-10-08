@@ -378,7 +378,7 @@ impl BertPredictionHeadTransform {
     }
 
     pub fn forward(&self, hidden_states: &Tensor) -> Tensor {
-        ((&self.activation.0)(&hidden_states.apply(&self.dense))).apply(&self.layer_norm)
+        ((&self.activation.get_fn())(&hidden_states.apply(&self.dense))).apply(&self.layer_norm)
     }
 }
 

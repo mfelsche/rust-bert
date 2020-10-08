@@ -147,7 +147,7 @@ impl DecoderLayer {
         );
         let output1: Tensor = output1.apply_t(&self.dropout, train) + output;
         let output1 = output1.apply(&self.encoder_attention_layer_norm);
-        let output2 = (self.activation.0)(&output1.apply(&self.fc1));
+        let output2 = (self.activation.get_fn())(&output1.apply(&self.fc1));
         let output2 = output2
             .apply_t(&self.activation_dropout, train)
             .apply(&self.fc2)

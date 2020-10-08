@@ -389,7 +389,7 @@ impl ElectraDiscriminatorHead {
     /// ```
     pub fn forward(&self, encoder_hidden_states: &Tensor) -> Tensor {
         let output = encoder_hidden_states.apply(&self.dense);
-        let output = (self.activation.0)(&output);
+        let output = (self.activation.get_fn())(&output);
         output.apply(&self.dense_prediction).squeeze()
     }
 }
@@ -488,7 +488,7 @@ impl ElectraGeneratorHead {
     /// ```
     pub fn forward(&self, encoder_hidden_states: &Tensor) -> Tensor {
         let output = encoder_hidden_states.apply(&self.dense);
-        let output = (self.activation.0)(&output);
+        let output = (self.activation.get_fn())(&output);
         output.apply(&self.layer_norm)
     }
 }

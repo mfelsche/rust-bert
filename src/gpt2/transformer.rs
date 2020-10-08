@@ -59,7 +59,7 @@ impl MLP {
     }
 
     pub fn forward_t(&self, x: &Tensor, train: bool) -> Tensor {
-        let h = (self.activation.0)(&x.apply(&self.c_fc));
+        let h = (self.activation.get_fn())(&x.apply(&self.c_fc));
         h.apply(&self.c_proj).apply_t(&self.dropout, train)
     }
 }

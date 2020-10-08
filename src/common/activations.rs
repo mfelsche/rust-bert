@@ -28,6 +28,11 @@ pub fn _tanh(x: &Tensor) -> Tensor {
 
 pub type TensorFunction = Box<fn(&Tensor) -> Tensor>;
 
+impl std::fmt::Debug for TensorFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "TensorFunction")
+    }
+}
 #[allow(non_camel_case_types)]
 #[derive(Clone, Debug, Serialize, Deserialize, Copy)]
 /// # Activation function used in the attention layer and masked language model head

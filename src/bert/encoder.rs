@@ -168,6 +168,7 @@ impl BertEncoder {
     }
 }
 
+#[derive(Debug)]
 pub struct BertPooler {
     lin: nn::Linear,
 }

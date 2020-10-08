@@ -37,7 +37,7 @@ impl MLP {
 
         let c_fc = GPTConv1D::new(p / "c_fc", config.n_embd * 4, config.n_embd);
         let c_proj = GPTConv1D::new(p / "c_proj", config.n_embd, config.n_embd * 4);
-        let activation = Box::new(match &config.afn {
+        let activation = TensorFunction(Box::new(match &config.afn {
             Some(activation_enum) => match activation_enum {
                 Activation::gelu => _gelu_new,
                 Activation::relu => _relu,
@@ -47,7 +47,7 @@ impl MLP {
                 Activation::tanh => _tanh,
             },
             None => _gelu_new,
-        });
+        }));
         let resid_pdrop = config.resid_pdrop.unwrap_or(0.1);
         let dropout = Dropout::new(resid_pdrop);
         MLP {
